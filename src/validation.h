@@ -17,7 +17,6 @@
 #include <crypto/common.h> // for ReadLE64
 #include <fs.h>
 #include <node/utxo_snapshot.h>
-#include <optional.h>
 #include <policy/feerate.h>
 #include <protocol.h> // For CMessageHeader::MessageStartChars
 #include <script/script_error.h>
@@ -32,6 +31,7 @@
 #include <atomic>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <stdint.h>
 #include <string>
@@ -148,8 +148,6 @@ extern const std::vector<std::string> CHECKLEVEL_DOC;
 FILE* OpenBlockFile(const FlatFilePos &pos, bool fReadOnly = false);
 /** Translation to a filesystem path */
 fs::path GetBlockPosFilename(const FlatFilePos &pos);
-/** Ensures we have a genesis block in the block tree, possibly writing one to disk. */
-bool LoadGenesisBlock(const CChainParams& chainparams);
 /** Unload database information */
 void UnloadBlockIndex(CTxMemPool* mempool, ChainstateManager& chainman);
 /** Run instances of script checking worker threads */
@@ -183,7 +181,7 @@ uint64_t CalculateCurrentUsage();
 void UnlinkPrunedFiles(const std::set<int>& setFilesToPrune);
 
 /** Prune block files up to a given height */
-void PruneBlockFilesManual(int nManualPruneHeight);
+void PruneBlockFilesManual(CChainState& active_chainstate, int nManualPruneHeight);
 
 /**
 * Validation result for a single transaction mempool acceptance.
@@ -207,8 +205,7 @@ struct MempoolAcceptResult {
 
     /** Constructor for failure case */
     explicit MempoolAcceptResult(TxValidationState state)
-        : m_result_type(ResultType::INVALID),
-        m_state(state), m_replaced_transactions(nullopt), m_base_fees(nullopt) {
+        : m_result_type(ResultType::INVALID), m_state(state) {
             Assume(!state.IsValid()); // Can be invalid or error
         }
 
@@ -223,17 +220,8 @@ struct MempoolAcceptResult {
  * @param[in]  bypass_limits   When true, don't enforce mempool fee limits.
  * @param[in]  test_accept     When true, run validation checks but don't submit to mempool.
  */
-MempoolAcceptResult AcceptToMemoryPool(CTxMemPool& pool, const CTransactionRef& tx,
+MempoolAcceptResult AcceptToMemoryPool(CChainState& active_chainstate, CTxMemPool& pool, const CTransactionRef& tx,
                                        bool bypass_limits, bool test_accept=false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-
-/** Get the BIP9 state for a given deployment at the current tip. */
-ThresholdState VersionBitsTipState(const Consensus::Params& params, Consensus::DeploymentPos pos);
-
-/** Get the numerical statistics for the BIP9 state for a given deployment at the current tip. */
-BIP9Stats VersionBitsTipStatistics(const Consensus::Params& params, Consensus::DeploymentPos pos);
-
-/** Get the block height at which the BIP9 deployment switched into the state for the block building on the current tip. */
-int VersionBitsTipStateSinceHeight(const Consensus::Params& params, Consensus::DeploymentPos pos);
 
 
 /** Apply the effects of this transaction on the UTXO set represented by view */
@@ -248,12 +236,12 @@ void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, int nHeight);
  *
  * See consensus/consensus.h for flag definitions.
  */
-bool CheckFinalTx(const CTransaction &tx, int flags = -1) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+bool CheckFinalTx(const CBlockIndex* active_chain_tip, const CTransaction &tx, int flags = -1) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 /**
  * Test whether the LockPoints height and time are still valid on the current chain
  */
-bool TestLockPointValidity(const LockPoints* lp) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+bool TestLockPointValidity(CChain& active_chain, const LockPoints* lp) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 /**
  * Check if transaction will be BIP 68 final in the next block to be created.
@@ -266,7 +254,12 @@ bool TestLockPointValidity(const LockPoints* lp) EXCLUSIVE_LOCKS_REQUIRED(cs_mai
  *
  * See consensus/consensus.h for flag definitions.
  */
-bool CheckSequenceLocks(const CTxMemPool& pool, const CTransaction& tx, int flags, LockPoints* lp = nullptr, bool useExistingLockPoints = false) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, pool.cs);
+bool CheckSequenceLocks(CChainState& active_chainstate,
+                        const CTxMemPool& pool,
+                        const CTransaction& tx,
+                        int flags,
+                        LockPoints* lp = nullptr,
+                        bool useExistingLockPoints = false) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, pool.cs);
 
 /**
  * Closure representing one script verification
@@ -344,7 +337,7 @@ class CVerifyDB {
 public:
     CVerifyDB();
     ~CVerifyDB();
-    bool VerifyDB(const CChainParams& chainparams, CCoinsView *coinsview, int nCheckLevel, int nCheckDepth);
+    bool VerifyDB(const CChainParams& chainparams, CChainState& active_chainstate, CCoinsView *coinsview, int nCheckLevel, int nCheckDepth) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 };
 
 enum DisconnectResult
@@ -464,7 +457,7 @@ public:
         const CChainParams& chainparams,
         CBlockIndex** ppindex) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
-    CBlockIndex* LookupBlockIndex(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    CBlockIndex* LookupBlockIndex(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Find the last common block between the parameter chain and a locator. */
     CBlockIndex* FindForkInGlobalIndex(const CChain& chain, const CBlockLocator& locator) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
@@ -716,13 +709,20 @@ public:
     bool DisconnectTip(BlockValidationState& state, const CChainParams& chainparams, DisconnectedBlockTransactions* disconnectpool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool.cs);
 
     // Manual block validity manipulation:
+    /** Mark a block as precious and reorganize.
+     *
+     * May not be called in a validationinterface callback.
+     */
     bool PreciousBlock(BlockValidationState& state, const CChainParams& params, CBlockIndex* pindex) LOCKS_EXCLUDED(cs_main);
+    /** Mark a block as invalid. */
     bool InvalidateBlock(BlockValidationState& state, const CChainParams& chainparams, CBlockIndex* pindex) LOCKS_EXCLUDED(cs_main);
+    /** Remove invalidity status from a block and its descendants. */
     void ResetBlockFailureFlags(CBlockIndex* pindex) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Replay blocks that aren't fully applied to the database. */
     bool ReplayBlocks(const CChainParams& params);
     bool RewindBlockIndex(const CChainParams& params) LOCKS_EXCLUDED(cs_main);
+    /** Ensures we have a genesis block in the block tree, possibly writing one to disk. */
     bool LoadGenesisBlock(const CChainParams& chainparams);
 
     void PruneBlockIndexCandidates();
@@ -771,21 +771,13 @@ private:
     //! Mark a block as not having block data
     void EraseBlockData(CBlockIndex* index) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
+    void CheckForkWarningConditions() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void InvalidChainFound(CBlockIndex* pindexNew) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+    bool LoadBlockIndexDB(const CChainParams& chainparams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
     friend ChainstateManager;
 };
-
-/** Mark a block as precious and reorganize.
- *
- * May not be called in a
- * validationinterface callback.
- */
-bool PreciousBlock(BlockValidationState& state, const CChainParams& params, CBlockIndex *pindex) LOCKS_EXCLUDED(cs_main);
-
-/** Mark a block as invalid. */
-bool InvalidateBlock(BlockValidationState& state, const CChainParams& chainparams, CBlockIndex* pindex) LOCKS_EXCLUDED(cs_main);
-
-/** Remove invalidity status from a block and its descendants. */
-void ResetBlockFailureFlags(CBlockIndex* pindex) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 /**
  * Provides an interface for creating and interacting with one or two
@@ -931,7 +923,7 @@ public:
 
     bool IsSnapshotActive() const;
 
-    Optional<uint256> SnapshotBlockhash() const;
+    std::optional<uint256> SnapshotBlockhash() const;
 
     //! Is there a snapshot in use and has it been fully validated?
     bool IsSnapshotValidated() const { return m_snapshot_validated; }
@@ -1020,11 +1012,13 @@ int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Para
 /** Get block file info entry for one block file */
 CBlockFileInfo* GetBlockFileInfo(size_t n);
 
+using FopenFn = std::function<FILE*(const fs::path&, const char*)>;
+
 /** Dump the mempool to disk. */
-bool DumpMempool(const CTxMemPool& pool);
+bool DumpMempool(const CTxMemPool& pool, FopenFn mockable_fopen_function = fsbridge::fopen, bool skip_file_commit = false);
 
 /** Load the mempool from disk. */
-bool LoadMempool(CTxMemPool& pool);
+bool LoadMempool(CTxMemPool& pool, CChainState& active_chainstate, FopenFn mockable_fopen_function = fsbridge::fopen);
 
 //! Check whether the block associated with this index entry is pruned or not.
 inline bool IsBlockPruned(const CBlockIndex* pblockindex)
@@ -1035,7 +1029,7 @@ inline bool IsBlockPruned(const CBlockIndex* pblockindex)
 /**
  * Return the expected assumeutxo value for a given height, if one exists.
  *
- * @param height[in] Get the assumeutxo value for this height.
+ * @param[in] height Get the assumeutxo value for this height.
  *
  * @returns empty if no assumeutxo configuration exists for the given height.
  */
