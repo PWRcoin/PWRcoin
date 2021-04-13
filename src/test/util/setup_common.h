@@ -15,6 +15,7 @@
 #include <txmempool.h>
 #include <util/check.h>
 #include <util/string.h>
+#include <util/vector.h>
 
 #include <type_traits>
 #include <vector>
@@ -111,7 +112,7 @@ class CScript;
  * Testing fixture that pre-creates a 100-block REGTEST-mode block chain
  */
 struct TestChain100Setup : public RegTestingSetup {
-    TestChain100Setup(bool deterministic = false);
+    TestChain100Setup();
 
     /**
      * Create a new block with just given transactions, coinbase paying to
@@ -142,15 +143,26 @@ struct TestChain100Setup : public RegTestingSetup {
 
     ~TestChain100Setup();
 
-    bool m_deterministic;
     std::vector<CTransactionRef> m_coinbase_txns; // For convenience, coinbase transactions
     CKey coinbaseKey; // private/public key needed to spend coinbase transactions
 };
 
+/**
+ * Make a test setup that has disk access to the debug.log file disabled. Can
+ * be used in "hot loops", for example fuzzing or benchmarking.
+ */
+template <class T = const BasicTestingSetup>
+std::unique_ptr<T> MakeNoLogFileContext(const std::string& chain_name = CBaseChainParams::REGTEST, const std::vector<const char*>& extra_args = {})
+{
+    const std::vector<const char*> arguments = Cat(
+        {
+            "-nodebuglogfile",
+            "-nodebug",
+        },
+        extra_args);
 
-struct TestChain100DeterministicSetup : public TestChain100Setup {
-    TestChain100DeterministicSetup() : TestChain100Setup(true) { }
-};
+    return std::make_unique<T>(chain_name, arguments);
+}
 
 class CTxMemPoolEntry;
 

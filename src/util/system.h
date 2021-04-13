@@ -19,16 +19,16 @@
 #include <compat/assumptions.h>
 #include <fs.h>
 #include <logging.h>
-#include <optional.h>
 #include <sync.h>
 #include <tinyformat.h>
-#include <util/memory.h>
 #include <util/settings.h>
 #include <util/threadnames.h>
 #include <util/time.h>
 
+#include <any>
 #include <exception>
 #include <map>
+#include <optional>
 #include <set>
 #include <stdint.h>
 #include <string>
@@ -108,7 +108,7 @@ std::string ShellEscape(const std::string& arg);
 #if HAVE_SYSTEM
 void runCommand(const std::string& strCommand);
 #endif
-#ifdef HAVE_BOOST_PROCESS
+#ifdef ENABLE_EXTERNAL_SIGNER
 /**
  * Execute a command which returns JSON, and parse the result.
  *
@@ -117,7 +117,7 @@ void runCommand(const std::string& strCommand);
  * @return parsed JSON
  */
 UniValue RunCommandParseJSON(const std::string& str_command, const std::string& str_std_in="");
-#endif // HAVE_BOOST_PROCESS
+#endif // ENABLE_EXTERNAL_SIGNER
 
 /**
  * Most paths passed as configuration arguments are treated as relative to
@@ -376,7 +376,7 @@ public:
      * Return Flags for known arg.
      * Return nullopt for unknown arg.
      */
-    Optional<unsigned int> GetArgFlags(const std::string& name) const;
+    std::optional<unsigned int> GetArgFlags(const std::string& name) const;
 
     /**
      * Read and update settings file with saved settings. This needs to be
@@ -499,6 +499,18 @@ inline void insert(Tdst& dst, const Tsrc& src) {
 template <typename TsetT, typename Tsrc>
 inline void insert(std::set<TsetT>& dst, const Tsrc& src) {
     dst.insert(src.begin(), src.end());
+}
+
+/**
+ * Helper function to access the contained object of a std::any instance.
+ * Returns a pointer to the object if passed instance has a value and the type
+ * matches, nullptr otherwise.
+ */
+template<typename T>
+T* AnyPtr(const std::any& any) noexcept
+{
+    T* const* ptr = std::any_cast<T*>(&any);
+    return ptr ? *ptr : nullptr;
 }
 
 #ifdef WIN32
