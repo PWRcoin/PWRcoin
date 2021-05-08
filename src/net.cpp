@@ -1224,19 +1224,10 @@ void CConnman::DisconnectNodes()
         std::list<CNode*> vNodesDisconnectedCopy = vNodesDisconnected;
         for (CNode* pnode : vNodesDisconnectedCopy)
         {
-            // wait until threads are done using it
+            // Destroy the object only after other threads have stopped using it.
             if (pnode->GetRefCount() <= 0) {
-                bool fDelete = false;
-                {
-                    TRY_LOCK(pnode->cs_vSend, lockSend);
-                    if (lockSend) {
-                        fDelete = true;
-                    }
-                }
-                if (fDelete) {
-                    vNodesDisconnected.remove(pnode);
-                    DeleteNode(pnode);
-                }
+                vNodesDisconnected.remove(pnode);
+                DeleteNode(pnode);
             }
         }
     }
@@ -2635,23 +2626,26 @@ void CConnman::StopNodes()
         }
     }
 
-    // Close sockets
-    LOCK(cs_vNodes);
-    for (CNode* pnode : vNodes)
+    // Delete peer connections.
+    std::vector<CNode*> nodes;
+    WITH_LOCK(cs_vNodes, nodes.swap(vNodes));
+    for (CNode* pnode : nodes) {
         pnode->CloseSocketDisconnect();
-    for (ListenSocket& hListenSocket : vhListenSocket)
-        if (hListenSocket.socket != INVALID_SOCKET)
-            if (!CloseSocket(hListenSocket.socket))
-                LogPrintf("CloseSocket(hListenSocket) failed with error %s\n", NetworkErrorString(WSAGetLastError()));
-
-    // clean up some globals (to help leak detection)
-    for (CNode* pnode : vNodes) {
         DeleteNode(pnode);
     }
+
+    // Close listening sockets.
+    for (ListenSocket& hListenSocket : vhListenSocket) {
+        if (hListenSocket.socket != INVALID_SOCKET) {
+            if (!CloseSocket(hListenSocket.socket)) {
+                LogPrintf("CloseSocket(hListenSocket) failed with error %s\n", NetworkErrorString(WSAGetLastError()));
+            }
+        }
+    }
+
     for (CNode* pnode : vNodesDisconnected) {
         DeleteNode(pnode);
     }
-    vNodes.clear();
     vNodesDisconnected.clear();
     vhListenSocket.clear();
     semOutbound.reset();
