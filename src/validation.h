@@ -27,6 +27,7 @@
 #include <serialize.h>
 #include <util/check.h>
 #include <util/hasher.h>
+#include <util/translation.h>
 
 #include <atomic>
 #include <map>
@@ -70,8 +71,6 @@ static const unsigned int DEFAULT_DESCENDANT_LIMIT = 25;
 static const unsigned int DEFAULT_DESCENDANT_SIZE_LIMIT = 101;
 /** Default for -mempoolexpiry, expiration time for mempool transactions in hours */
 static const unsigned int DEFAULT_MEMPOOL_EXPIRY = 336;
-/** The maximum size of a blk?????.dat file (since 0.8) */
-static const unsigned int MAX_BLOCKFILE_SIZE = 0x8000000; // 128 MiB
 /** Maximum number of dedicated script-checking threads allowed */
 static const int MAX_SCRIPTCHECK_THREADS = 15;
 /** -par default (number of script-checking threads, 0 = auto) */
@@ -79,6 +78,7 @@ static const int DEFAULT_SCRIPTCHECK_THREADS = 0;
 static const int64_t DEFAULT_MAX_TIP_AGE = 24 * 60 * 60;
 static const bool DEFAULT_CHECKPOINTS_ENABLED = true;
 static const bool DEFAULT_TXINDEX = false;
+static constexpr bool DEFAULT_COINSTATSINDEX{false};
 static const char* const DEFAULT_BLOCKFILTERINDEX = "0";
 /** Default for -persistmempool */
 static const bool DEFAULT_PERSIST_MEMPOOL = true;
@@ -112,8 +112,6 @@ typedef std::unordered_map<uint256, CBlockIndex*, BlockHasher> BlockMap;
 extern Mutex g_best_block_mutex;
 extern std::condition_variable g_best_block_cv;
 extern uint256 g_best_block;
-extern std::atomic_bool fImporting;
-extern std::atomic_bool fReindex;
 /** Whether there are dedicated script-checking threads running.
  * False indicates all script checking is done on the main threadMessageHandler thread.
  */
@@ -135,20 +133,9 @@ extern arith_uint256 nMinimumChainWork;
 /** Best header we've seen so far (used for getheaders queries' starting points). */
 extern CBlockIndex *pindexBestHeader;
 
-/** Pruning-related variables and constants */
-/** True if any block files have ever been pruned. */
-extern bool fHavePruned;
-/** True if we're running in -prune mode. */
-extern bool fPruneMode;
-/** Number of MiB of block files that we're trying to stay below. */
-extern uint64_t nPruneTarget;
 /** Documentation for argument 'checklevel'. */
 extern const std::vector<std::string> CHECKLEVEL_DOC;
 
-/** Open a block file (blk?????.dat) */
-FILE* OpenBlockFile(const FlatFilePos &pos, bool fReadOnly = false);
-/** Translation to a filesystem path */
-fs::path GetBlockPosFilename(const FlatFilePos &pos);
 /** Unload database information */
 void UnloadBlockIndex(CTxMemPool* mempool, ChainstateManager& chainman);
 /** Run instances of script checking worker threads */
@@ -170,16 +157,10 @@ void StopScriptCheckWorkerThreads();
 CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMemPool* const mempool, const uint256& hash, const Consensus::Params& consensusParams, uint256& hashBlock);
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams);
 
+bool AbortNode(BlockValidationState& state, const std::string& strMessage, const bilingual_str& userMessage = bilingual_str{});
+
 /** Guess verification progress (as a fraction between 0.0=genesis and 1.0=current tip). */
 double GuessVerificationProgress(const ChainTxData& data, const CBlockIndex* pindex);
-
-/** Calculate the amount of disk space the block & undo files currently use */
-uint64_t CalculateCurrentUsage();
-
-/**
- *  Actually unlink the specified files
- */
-void UnlinkPrunedFiles(const std::set<int>& setFilesToPrune);
 
 /** Prune block files up to a given height */
 void PruneBlockFilesManual(CChainState& active_chainstate, int nManualPruneHeight);
@@ -195,14 +176,14 @@ struct MempoolAcceptResult {
         VALID, //!> Fully validated, valid.
         INVALID, //!> Invalid.
     };
-    ResultType m_result_type;
-    TxValidationState m_state;
+    const ResultType m_result_type;
+    const TxValidationState m_state;
 
     // The following fields are only present when m_result_type = ResultType::VALID
     /** Mempool transactions replaced by the tx per BIP 125 rules. */
-    std::optional<std::list<CTransactionRef>> m_replaced_transactions;
-    /** Raw base fees. */
-    std::optional<CAmount> m_base_fees;
+    const std::optional<std::list<CTransactionRef>> m_replaced_transactions;
+    /** Raw base fees in satoshis. */
+    const std::optional<CAmount> m_base_fees;
 
     /** Constructor for failure case */
     explicit MempoolAcceptResult(TxValidationState state)
@@ -212,7 +193,7 @@ struct MempoolAcceptResult {
 
     /** Constructor for success case */
     explicit MempoolAcceptResult(std::list<CTransactionRef>&& replaced_txns, CAmount fees)
-        : m_result_type(ResultType::VALID), m_state(TxValidationState{}),
+        : m_result_type(ResultType::VALID),
         m_replaced_transactions(std::move(replaced_txns)), m_base_fees(fees) {}
 };
 
@@ -329,7 +310,12 @@ class CVerifyDB {
 public:
     CVerifyDB();
     ~CVerifyDB();
-    bool VerifyDB(const CChainParams& chainparams, CChainState& active_chainstate, CCoinsView *coinsview, int nCheckLevel, int nCheckDepth) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool VerifyDB(
+        CChainState& chainstate,
+        const CChainParams& chainparams,
+        CCoinsView& coinsview,
+        int nCheckLevel,
+        int nCheckDepth) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 };
 
 enum DisconnectResult
@@ -713,7 +699,9 @@ public:
 
     /** Replay blocks that aren't fully applied to the database. */
     bool ReplayBlocks(const CChainParams& params);
-    bool RewindBlockIndex(const CChainParams& params) LOCKS_EXCLUDED(cs_main);
+
+    /** Whether the chain state needs to be redownloaded due to lack of witness data */
+    [[nodiscard]] bool NeedsRedownload(const CChainParams& params) const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     /** Ensures we have a genesis block in the block tree, possibly writing one to disk. */
     bool LoadGenesisBlock(const CChainParams& chainparams);
 
@@ -759,9 +747,6 @@ private:
     void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos, const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     bool RollforwardBlock(const CBlockIndex* pindex, CCoinsViewCache& inputs, const CChainParams& params) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-
-    //! Mark a block as not having block data
-    void EraseBlockData(CBlockIndex* index) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     void CheckForkWarningConditions() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     void InvalidChainFound(CBlockIndex* pindexNew) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
@@ -914,6 +899,8 @@ public:
         return m_blockman.m_block_index;
     }
 
+    //! @returns true if a snapshot-based chainstate is in use. Also implies
+    //!          that a background validation chainstate is also in use.
     bool IsSnapshotActive() const;
 
     std::optional<uint256> SnapshotBlockhash() const;
@@ -1002,9 +989,6 @@ extern VersionBitsCache versionbitscache;
  */
 int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params);
 
-/** Get block file info entry for one block file */
-CBlockFileInfo* GetBlockFileInfo(size_t n);
-
 using FopenFn = std::function<FILE*(const fs::path&, const char*)>;
 
 /** Dump the mempool to disk. */
@@ -1012,12 +996,6 @@ bool DumpMempool(const CTxMemPool& pool, FopenFn mockable_fopen_function = fsbri
 
 /** Load the mempool from disk. */
 bool LoadMempool(CTxMemPool& pool, CChainState& active_chainstate, FopenFn mockable_fopen_function = fsbridge::fopen);
-
-//! Check whether the block associated with this index entry is pruned or not.
-inline bool IsBlockPruned(const CBlockIndex* pblockindex)
-{
-    return (fHavePruned && !(pblockindex->nStatus & BLOCK_HAVE_DATA) && pblockindex->nTx > 0);
-}
 
 /**
  * Return the expected assumeutxo value for a given height, if one exists.

@@ -21,6 +21,7 @@
 #include <httprpc.h>
 #include <httpserver.h>
 #include <index/blockfilterindex.h>
+#include <index/coinstatsindex.h>
 #include <index/txindex.h>
 #include <init/common.h>
 #include <interfaces/chain.h>
@@ -165,6 +166,9 @@ void Interrupt(NodeContext& node)
         g_txindex->Interrupt();
     }
     ForEachBlockFilterIndex([](BlockFilterIndex& index) { index.Interrupt(); });
+    if (g_coin_stats_index) {
+        g_coin_stats_index->Interrupt();
+    }
 }
 
 void Shutdown(NodeContext& node)
@@ -194,20 +198,7 @@ void Shutdown(NodeContext& node)
     // Because these depend on each-other, we make sure that neither can be
     // using the other before destroying them.
     if (node.peerman) UnregisterValidationInterface(node.peerman.get());
-    // Follow the lock order requirements:
-    // * CheckForStaleTipAndEvictPeers locks cs_main before indirectly calling GetExtraFullOutboundCount
-    //   which locks cs_vNodes.
-    // * ProcessMessage locks cs_main and g_cs_orphans before indirectly calling ForEachNode which
-    //   locks cs_vNodes.
-    // * CConnman::Stop calls DeleteNode, which calls FinalizeNode, which locks cs_main and calls
-    //   EraseOrphansFor, which locks g_cs_orphans.
-    //
-    // Thus the implicit locking order requirement is: (1) cs_main, (2) g_cs_orphans, (3) cs_vNodes.
-    if (node.connman) {
-        node.connman->StopThreads();
-        LOCK2(::cs_main, ::g_cs_orphans);
-        node.connman->StopNodes();
-    }
+    if (node.connman) node.connman->Stop();
 
     StopTorControl();
 
@@ -249,6 +240,10 @@ void Shutdown(NodeContext& node)
     if (g_txindex) {
         g_txindex->Stop();
         g_txindex.reset();
+    }
+    if (g_coin_stats_index) {
+        g_coin_stats_index->Stop();
+        g_coin_stats_index.reset();
     }
     ForEachBlockFilterIndex([](BlockFilterIndex& index) { index.Stop(); });
     DestroyAllBlockFilterIndexes();
@@ -389,6 +384,7 @@ void SetupServerArgs(NodeContext& node)
 #endif
     argsman.AddArg("-blockreconstructionextratxn=<n>", strprintf("Extra transactions to keep in memory for compact block reconstructions (default: %u)", DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-blocksonly", strprintf("Whether to reject transactions from network peers. Automatic broadcast and rebroadcast of any transactions from inbound peers is disabled, unless the peer has the 'forcerelay' permission. RPC transactions are not affected. (default: %u)", DEFAULT_BLOCKSONLY), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-coinstatsindex", strprintf("Maintain coinstats index used by the gettxoutsetinfo RPC (default: %u)", DEFAULT_COINSTATSINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-conf=<file>", strprintf("Specify path to read-only configuration file. Relative paths will be prefixed by datadir location. (default: %s)", BITCOIN_CONF_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-datadir=<dir>", "Specify data directory", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-dbbatchsize", strprintf("Maximum database write batch size in bytes (default: %u)", nDefaultDbBatchSize), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::OPTIONS);
@@ -404,7 +400,7 @@ void SetupServerArgs(NodeContext& node)
         -GetNumCores(), MAX_SCRIPTCHECK_THREADS, DEFAULT_SCRIPTCHECK_THREADS), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-persistmempool", strprintf("Whether to save the mempool on shutdown and load on restart (default: %u)", DEFAULT_PERSIST_MEMPOOL), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-pid=<file>", strprintf("Specify pid file. Relative paths will be prefixed by a net-specific datadir location. (default: %s)", BITCOIN_PID_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    argsman.AddArg("-prune=<n>", strprintf("Reduce storage requirements by enabling pruning (deleting) of old blocks. This allows the pruneblockchain RPC to be called to delete specific blocks, and enables automatic pruning of old blocks if a target size in MiB is provided. This mode is incompatible with -txindex and -rescan. "
+    argsman.AddArg("-prune=<n>", strprintf("Reduce storage requirements by enabling pruning (deleting) of old blocks. This allows the pruneblockchain RPC to be called to delete specific blocks, and enables automatic pruning of old blocks if a target size in MiB is provided. This mode is incompatible with -txindex, -coinstatsindex and -rescan. "
             "Warning: Reverting this setting requires re-downloading the entire blockchain. "
             "(default: 0 = disable pruning blocks, 1 = allow manual pruning via RPC, >=%u = automatically prune block files to stay under the specified target size in MiB)", MIN_DISK_SPACE_FOR_BLOCK_FILES / 1024 / 1024), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-reindex", "Rebuild chain state and block index from the blk*.dat files on disk", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -424,7 +420,7 @@ void SetupServerArgs(NodeContext& node)
                  " If <type> is not supplied or if <type> = 1, indexes for all known types are enabled.",
                  ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 
-    argsman.AddArg("-addnode=<ip>", "Add a node to connect to and attempt to keep the connection open (see the `addnode` RPC command help for more info). This option can be specified multiple times to add multiple nodes.", ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::CONNECTION);
+    argsman.AddArg("-addnode=<ip>", strprintf("Add a node to connect to and attempt to keep the connection open (see the addnode RPC help for more info). This option can be specified multiple times to add multiple nodes; connections are limited to %u at a time and are counted separately from the -maxconnections limit.", MAX_ADDNODE_CONNECTIONS), ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::CONNECTION);
     argsman.AddArg("-asmap=<file>", strprintf("Specify asn mapping used for bucketing of the peers (default: %s). Relative paths will be prefixed by the net-specific datadir location.", DEFAULT_ASMAP_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-bantime=<n>", strprintf("Default duration (in seconds) of manually configured bans (default: %u)", DEFAULT_MISBEHAVING_BANTIME), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-bind=<addr>[:<port>][=onion]", strprintf("Bind to given address and always listen on it (default: 0.0.0.0). Use [host]:port notation for IPv6. Append =onion to tag any incoming connections to that address and port as incoming Tor connections (default: 127.0.0.1:%u=onion, testnet: 127.0.0.1:%u=onion, signet: 127.0.0.1:%u=onion, regtest: 127.0.0.1:%u=onion)", defaultBaseParams->OnionServiceTargetPort(), testnetBaseParams->OnionServiceTargetPort(), signetBaseParams->OnionServiceTargetPort(), regtestBaseParams->OnionServiceTargetPort()), ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::CONNECTION);
@@ -437,7 +433,7 @@ void SetupServerArgs(NodeContext& node)
     argsman.AddArg("-forcednsseed", strprintf("Always query for peer addresses via DNS lookup (default: %u)", DEFAULT_FORCEDNSSEED), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-listen", "Accept connections from outside (default: 1 if no -proxy or -connect)", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-listenonion", strprintf("Automatically create Tor onion service (default: %d)", DEFAULT_LISTEN_ONION), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
-    argsman.AddArg("-maxconnections=<n>", strprintf("Maintain at most <n> connections to peers (default: %u)", DEFAULT_MAX_PEER_CONNECTIONS), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
+    argsman.AddArg("-maxconnections=<n>", strprintf("Maintain at most <n> connections to peers (default: %u). This limit does not apply to connections manually added via -addnode or the addnode RPC, which have a separate limit of %u.", DEFAULT_MAX_PEER_CONNECTIONS, MAX_ADDNODE_CONNECTIONS), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-maxreceivebuffer=<n>", strprintf("Maximum per-connection receive buffer, <n>*1000 bytes (default: %u)", DEFAULT_MAXRECEIVEBUFFER), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-maxsendbuffer=<n>", strprintf("Maximum per-connection send buffer, <n>*1000 bytes (default: %u)", DEFAULT_MAXSENDBUFFER), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-maxtimeadjustment", strprintf("Maximum allowed median peer time offset adjustment. Local perspective of time may be influenced by peers forward or backward by this amount. (default: %u seconds)", DEFAULT_MAX_TIME_ADJUSTMENT), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
@@ -603,47 +599,6 @@ static void BlockNotifyGenesisWait(const CBlockIndex* pBlockIndex)
             fHaveGenesis = true;
         }
         g_genesis_wait_cv.notify_all();
-    }
-}
-
-// If we're using -prune with -reindex, then delete block files that will be ignored by the
-// reindex.  Since reindexing works by starting at block file 0 and looping until a blockfile
-// is missing, do the same here to delete any later block files after a gap.  Also delete all
-// rev files since they'll be rewritten by the reindex anyway.  This ensures that vinfoBlockFile
-// is in sync with what's actually on disk by the time we start downloading, so that pruning
-// works correctly.
-static void CleanupBlockRevFiles()
-{
-    std::map<std::string, fs::path> mapBlockFiles;
-
-    // Glob all blk?????.dat and rev?????.dat files from the blocks directory.
-    // Remove the rev files immediately and insert the blk file paths into an
-    // ordered map keyed by block file index.
-    LogPrintf("Removing unusable blk?????.dat and rev?????.dat files for -reindex with -prune\n");
-    fs::path blocksdir = gArgs.GetBlocksDirPath();
-    for (fs::directory_iterator it(blocksdir); it != fs::directory_iterator(); it++) {
-        if (fs::is_regular_file(*it) &&
-            it->path().filename().string().length() == 12 &&
-            it->path().filename().string().substr(8,4) == ".dat")
-        {
-            if (it->path().filename().string().substr(0,3) == "blk")
-                mapBlockFiles[it->path().filename().string().substr(3,5)] = it->path();
-            else if (it->path().filename().string().substr(0,3) == "rev")
-                remove(it->path());
-        }
-    }
-
-    // Remove all block files that aren't part of a contiguous set starting at
-    // zero by walking the ordered map (keys are block file indices) by
-    // keeping a separate counter.  Once we hit a gap (or if 0 doesn't exist)
-    // start removing block files.
-    int nContigCounter = 0;
-    for (const std::pair<const std::string, fs::path>& item : mapBlockFiles) {
-        if (atoi(item.first) == nContigCounter) {
-            nContigCounter++;
-            continue;
-        }
-        remove(item.second);
     }
 }
 
@@ -889,10 +844,12 @@ bool AppInitParameterInteraction(const ArgsManager& args)
         nLocalServices = ServiceFlags(nLocalServices | NODE_COMPACT_FILTERS);
     }
 
-    // if using block pruning, then disallow txindex
+    // if using block pruning, then disallow txindex and coinstatsindex
     if (args.GetArg("-prune", 0)) {
         if (args.GetBoolArg("-txindex", DEFAULT_TXINDEX))
             return InitError(_("Prune mode is incompatible with -txindex."));
+        if (args.GetBoolArg("-coinstatsindex", DEFAULT_COINSTATSINDEX))
+            return InitError(_("Prune mode is incompatible with -coinstatsindex."));
     }
 
     // -bind and -whitebind can't be set when not listening
@@ -1383,13 +1340,13 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     bool fLoaded = false;
     while (!fLoaded && !ShutdownRequested()) {
-        bool fReset = fReindex;
+        const bool fReset = fReindex;
         auto is_coinsview_empty = [&](CChainState* chainstate) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
             return fReset || fReindexChainState || chainstate->CoinsTip().GetBestBlock().IsNull();
         };
         bilingual_str strLoadError;
 
-        uiInterface.InitMessage(_("Loading block index...").translated);
+        uiInterface.InitMessage(_("Loading block index…").translated);
 
         do {
             const int64_t load_block_index_start_time = GetTimeMillis();
@@ -1504,27 +1461,15 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
                 break;
             }
 
-            bool failed_rewind{false};
-            // Can't hold cs_main while calling RewindBlockIndex, so retrieve the relevant
-            // chainstates beforehand.
-            for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
-                if (!fReset) {
-                    // Note that RewindBlockIndex MUST run even if we're about to -reindex-chainstate.
-                    // It both disconnects blocks based on the chainstate, and drops block data in
-                    // BlockIndex() based on lack of available witness data.
-                    uiInterface.InitMessage(_("Rewinding blocks...").translated);
-                    if (!chainstate->RewindBlockIndex(chainparams)) {
-                        strLoadError = _(
-                            "Unable to rewind the database to a pre-fork state. "
-                            "You will need to redownload the blockchain");
-                        failed_rewind = true;
-                        break; // out of the per-chainstate loop
-                    }
+            if (!fReset) {
+                LOCK(cs_main);
+                auto chainstates{chainman.GetAll()};
+                if (std::any_of(chainstates.begin(), chainstates.end(),
+                                [&chainparams](const CChainState* cs) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return cs->NeedsRedownload(chainparams); })) {
+                    strLoadError = strprintf(_("Witness data for blocks after height %d requires validation. Please restart with -reindex."),
+                                             chainparams.GetConsensus().SegwitHeight);
+                    break;
                 }
-            }
-
-            if (failed_rewind) {
-                break; // out of the chainstate activation do-while
             }
 
             bool failed_verification = false;
@@ -1534,7 +1479,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
                 for (CChainState* chainstate : chainman.GetAll()) {
                     if (!is_coinsview_empty(chainstate)) {
-                        uiInterface.InitMessage(_("Verifying blocks...").translated);
+                        uiInterface.InitMessage(_("Verifying blocks…").translated);
                         if (fHavePruned && args.GetArg("-checkblocks", DEFAULT_CHECKBLOCKS) > MIN_BLOCKS_TO_KEEP) {
                             LogPrintf("Prune: pruned datadir may not have more than %d blocks; only checking available blocks\n",
                                 MIN_BLOCKS_TO_KEEP);
@@ -1550,11 +1495,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
                             break;
                         }
 
-                        // Only verify the DB of the active chainstate. This is fixed in later
-                        // work when we allow VerifyDB to be parameterized by chainstate.
-                        if (&::ChainstateActive() == chainstate &&
-                            !CVerifyDB().VerifyDB(
-                                chainparams, *chainstate, &chainstate->CoinsDB(),
+                        if (!CVerifyDB().VerifyDB(
+                                *chainstate, chainparams, chainstate->CoinsDB(),
                                 args.GetArg("-checklevel", DEFAULT_CHECKLEVEL),
                                 args.GetArg("-checkblocks", DEFAULT_CHECKBLOCKS))) {
                             strLoadError = _("Corrupted block database detected");
@@ -1615,6 +1557,11 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         GetBlockFilterIndex(filter_type)->Start();
     }
 
+    if (args.GetBoolArg("-coinstatsindex", DEFAULT_COINSTATSINDEX)) {
+        g_coin_stats_index = std::make_unique<CoinStatsIndex>(/* cache size */ 0, false, fReindex);
+        g_coin_stats_index->Start();
+    }
+
     // ********************************************************* Step 9: load wallet
     for (const auto& client : node.chain_clients) {
         if (!client->load()) {
@@ -1632,7 +1579,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         if (!fReindex) {
             LOCK(cs_main);
             for (CChainState* chainstate : chainman.GetAll()) {
-                uiInterface.InitMessage(_("Pruning blockstore...").translated);
+                uiInterface.InitMessage(_("Pruning blockstore…").translated);
                 chainstate->PruneAndFlush();
             }
         }

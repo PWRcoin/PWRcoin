@@ -112,7 +112,7 @@ task:
     FILE_ENV: "./ci/test/00_setup_env_i686_centos.sh"
 
 task:
-  name: '[previous releases, uses qt5 dev package and some depends packages] [unsigned char] [bionic]'
+  name: '[previous releases, uses qt5 dev package and some depends packages, DEBUG] [unsigned char] [bionic]'
   previous_releases_cache:
     folder: "releases"
   << : *GLOBAL_TASK_TEMPLATE
@@ -143,10 +143,10 @@ task:
     FILE_ENV: "./ci/test/00_setup_env_native_msan.sh"
 
 task:
-  name: '[no depends, sanitizers: address/leak (ASan + LSan) + undefined (UBSan) + integer] [focal]'
+  name: '[no depends, sanitizers: address/leak (ASan + LSan) + undefined (UBSan) + integer] [hirsute]'
   << : *GLOBAL_TASK_TEMPLATE
   container:
-    image: ubuntu:focal
+    image: ubuntu:hirsute
   env:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
     FILE_ENV: "./ci/test/00_setup_env_native_asan.sh"
@@ -161,7 +161,7 @@ task:
     FILE_ENV: "./ci/test/00_setup_env_native_fuzz.sh"
 
 task:
-  name: '[multiprocess] [focal]'
+  name: '[multiprocess, DEBUG] [focal]'
   << : *GLOBAL_TASK_TEMPLATE
   container:
     image: ubuntu:focal

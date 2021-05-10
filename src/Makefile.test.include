@@ -80,6 +80,7 @@ BITCOIN_TESTS =\
   test/bswap_tests.cpp \
   test/checkqueue_tests.cpp \
   test/coins_tests.cpp \
+  test/coinstatsindex_tests.cpp \
   test/compilerbug_tests.cpp \
   test/compress_tests.cpp \
   test/crypto_tests.cpp \
@@ -274,6 +275,7 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/random.cpp \
  test/fuzz/rbf.cpp \
  test/fuzz/rolling_bloom_filter.cpp \
+ test/fuzz/rpc.cpp \
  test/fuzz/script.cpp \
  test/fuzz/script_assets_test_minimizer.cpp \
  test/fuzz/script_bitcoin_consensus.cpp \
@@ -346,11 +348,6 @@ endif
 	$(AM_V_at)$(MAKE) $(AM_MAKEFLAGS) -C secp256k1 check
 if EMBEDDED_UNIVALUE
 	$(AM_V_at)$(MAKE) $(AM_MAKEFLAGS) -C univalue check
-endif
-
-if ENABLE_FUZZ_LINK_ALL
-all-local: $(FUZZ_BINARY)
-	bash ./test/fuzz/danger_link_all.sh
 endif
 
 %.cpp.test: %.cpp
