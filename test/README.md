@@ -6,7 +6,7 @@ etc.
 This directory contains the following sets of tests:
 
 - [functional](/test/functional) which test the functionality of
-bitcoind and bitcoin-qt by interacting with them through the RPC and P2P
+bitcoind and pwrcoin-qt by interacting with them through the RPC and P2P
 interfaces.
 - [util](/test/util) which tests the bitcoin utilities, currently only
 bitcoin-tx.
@@ -262,7 +262,7 @@ Use the `-v` option for verbose output.
 |-----------|:----------:|:-------------------------------------------:|--------------
 | [`lint-python.sh`](lint/lint-python.sh) | [flake8](https://gitlab.com/pycqa/flake8) | [3.8.3](https://github.com/bitcoin/bitcoin/pull/19348) | `pip3 install flake8==3.8.3`
 | [`lint-python.sh`](lint/lint-python.sh) | [mypy](https://github.com/python/mypy) | [0.781](https://github.com/bitcoin/bitcoin/pull/19348) | `pip3 install mypy==0.781`
-| [`lint-shell.sh`](lint/lint-shell.sh) | [ShellCheck](https://github.com/koalaman/shellcheck) | [0.7.2](https://github.com/bitcoin/bitcoin/pull/21749) | [details...](https://github.com/koalaman/shellcheck#installing)
+| [`lint-shell.sh`](lint/lint-shell.sh) | [ShellCheck](https://github.com/koalaman/shellcheck) | [0.7.1](https://github.com/bitcoin/bitcoin/pull/19348) | [details...](https://github.com/koalaman/shellcheck#installing)
 | [`lint-shell.sh`](lint/lint-shell.sh) | [yq](https://github.com/kislyuk/yq) | default | `pip3 install yq`
 | [`lint-spelling.sh`](lint/lint-spelling.sh) | [codespell](https://github.com/codespell-project/codespell) | [2.0.0](https://github.com/bitcoin/bitcoin/pull/20817) | `pip3 install codespell==2.0.0`
 
@@ -273,7 +273,7 @@ Please be aware that on Linux distributions all dependencies are usually availab
 Individual tests can be run by directly calling the test script, e.g.:
 
 ```
-test/lint/lint-files.sh
+test/lint/lint-filenames.sh
 ```
 
 You can run all the shell-based lint tests by running:

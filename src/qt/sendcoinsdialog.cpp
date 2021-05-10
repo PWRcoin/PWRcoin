@@ -129,8 +129,6 @@ SendCoinsDialog::SendCoinsDialog(const PlatformStyle *_platformStyle, QWidget *p
     ui->customFee->SetAllowEmpty(false);
     ui->customFee->setValue(settings.value("nTransactionFee").toLongLong());
     minimizeFeeSection(settings.value("fFeeSectionMinimized").toBool());
-
-    GUIUtil::ExceptionSafeConnect(ui->sendButton, &QPushButton::clicked, this, &SendCoinsDialog::sendButtonClicked);
 }
 
 void SendCoinsDialog::setClientModel(ClientModel *_clientModel)
@@ -271,7 +269,7 @@ bool SendCoinsDialog::PrepareSendText(QString& question_string, QString& informa
     m_current_transaction = std::make_unique<WalletModelTransaction>(recipients);
     WalletModel::SendCoinsReturn prepareStatus;
 
-    updateCoinControlState();
+    updateCoinControlState(*m_coin_control);
 
     prepareStatus = model->prepareTransaction(*m_current_transaction, *m_coin_control);
 
@@ -368,7 +366,7 @@ bool SendCoinsDialog::PrepareSendText(QString& question_string, QString& informa
 
     if (formatted.size() > 1) {
         question_string = question_string.arg("");
-        informative_text = tr("To review recipient list click \"Show Details…\"");
+        informative_text = tr("To review recipient list click \"Show Details...\"");
         detailed_text = formatted.join("\n\n");
     } else {
         question_string = question_string.arg("<br /><br />" + formatted.at(0));
@@ -377,7 +375,7 @@ bool SendCoinsDialog::PrepareSendText(QString& question_string, QString& informa
     return true;
 }
 
-void SendCoinsDialog::sendButtonClicked([[maybe_unused]] bool checked)
+void SendCoinsDialog::on_sendButton_clicked()
 {
     if(!model || !model->getOptionsModel())
         return;
@@ -740,19 +738,19 @@ void SendCoinsDialog::updateFeeMinimizedLabel()
     }
 }
 
-void SendCoinsDialog::updateCoinControlState()
+void SendCoinsDialog::updateCoinControlState(CCoinControl& ctrl)
 {
     if (ui->radioCustomFee->isChecked()) {
-        m_coin_control->m_feerate = CFeeRate(ui->customFee->value());
+        ctrl.m_feerate = CFeeRate(ui->customFee->value());
     } else {
-        m_coin_control->m_feerate.reset();
+        ctrl.m_feerate.reset();
     }
     // Avoid using global defaults when sending money from the GUI
     // Either custom fee will be used or if not selected, the confirmation target from dropdown box
-    m_coin_control->m_confirm_target = getConfTargetForIndex(ui->confTargetSelector->currentIndex());
-    m_coin_control->m_signal_bip125_rbf = ui->optInRBF->isChecked();
+    ctrl.m_confirm_target = getConfTargetForIndex(ui->confTargetSelector->currentIndex());
+    ctrl.m_signal_bip125_rbf = ui->optInRBF->isChecked();
     // Include watch-only for wallets without private key
-    m_coin_control->fAllowWatchOnly = model->wallet().privateKeysDisabled();
+    ctrl.fAllowWatchOnly = model->wallet().privateKeysDisabled();
 }
 
 void SendCoinsDialog::updateNumberOfBlocks(int count, const QDateTime& blockDate, double nVerificationProgress, bool headers, SynchronizationState sync_state) {
@@ -765,7 +763,7 @@ void SendCoinsDialog::updateSmartFeeLabel()
 {
     if(!model || !model->getOptionsModel())
         return;
-    updateCoinControlState();
+    updateCoinControlState(*m_coin_control);
     m_coin_control->m_feerate.reset(); // Explicitly use only fee estimation rate for smart fee labels
     int returned_target;
     FeeReason reason;
@@ -839,9 +837,8 @@ void SendCoinsDialog::coinControlFeatureChanged(bool checked)
 {
     ui->frameCoinControl->setVisible(checked);
 
-    if (!checked && model) { // coin control features disabled
-        m_coin_control = std::make_unique<CCoinControl>();
-    }
+    if (!checked && model) // coin control features disabled
+        m_coin_control->SetNull();
 
     coinControlUpdateLabels();
 }
@@ -929,7 +926,7 @@ void SendCoinsDialog::coinControlUpdateLabels()
     if (!model || !model->getOptionsModel())
         return;
 
-    updateCoinControlState();
+    updateCoinControlState(*m_coin_control);
 
     // set pay amounts
     CoinControlDialog::payAmounts.clear();

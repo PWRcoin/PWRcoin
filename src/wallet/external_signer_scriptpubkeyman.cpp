@@ -3,15 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chainparams.h>
-#include <external_signer.h>
+#include <wallet/external_signer.h>
 #include <wallet/external_signer_scriptpubkeyman.h>
-
-#include <iostream>
-#include <memory>
-#include <stdexcept>
-#include <string>
-#include <utility>
-#include <vector>
 
 #ifdef ENABLE_EXTERNAL_SIGNER
 

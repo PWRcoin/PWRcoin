@@ -19,7 +19,7 @@ How to Upgrade
 If you are running an older version, shut it down. Wait until it has completely
 shut down (which might take a few minutes for older versions), then run the 
 installer (on Windows) or just copy over `/Applications/Bitcoin-Qt` (on Mac)
-or `bitcoind`/`bitcoin-qt` (on Linux).
+or `bitcoind`/`pwrcoin-qt` (on Linux).
 
 The first time you run version 0.15.0, your chainstate database will be converted to a
 new format, which will take anywhere from a few minutes to half an hour,
@@ -694,7 +694,7 @@ Low-level RPC changes
 - #9734 `0c17afc` Add updating of chainTxData to release process (sipa)
 - #10063 `530fcbd` add missing spaces so that markdown recognizes headline (flack)
 - #10085 `db1ae54` Docs: remove 'noconnect' option (jlopp)
-- #10090 `8e4f7e7` Update bitcoin.conf with example for pruning (coinables)
+- #10090 `8e4f7e7` Update pwrcoin.conf with example for pruning (coinables)
 - #9424 `1a5aaab` Change LogAcceptCategory to use uint32_t rather than sets of strings (gmaxwell)
 - #10036 `fbf36ca` Fix init README format to render correctly on github (jlopp)
 - #10058 `a2cd0b0` No need to use OpenSSL malloc/free (tjps)

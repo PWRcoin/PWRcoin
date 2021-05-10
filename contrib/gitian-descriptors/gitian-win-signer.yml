@@ -1,5 +1,5 @@
 ---
-name: "bitcoin-win-signer"
+name: "PWRcoin-win-signer"
 distro: "ubuntu"
 suites:
 - "focal"
@@ -16,7 +16,7 @@ remotes:
   "dir": "signature"
 files:
 - "osslsigncode-2.0.tar.gz"
-- "bitcoin-win-unsigned.tar.gz"
+- "PWRcoin-win-unsigned.tar.gz"
 script: |
   set -e -o pipefail
 

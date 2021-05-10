@@ -18,7 +18,7 @@ How to Upgrade
 If you are running an older version, shut it down. Wait until it has completely
 shut down (which might take a few minutes for older versions), then run the
 installer (on Windows) or just copy over /Applications/Bitcoin-Qt (on Mac) or
-bitcoind/bitcoin-qt (on Linux).
+bitcoind/pwrcoin-qt (on Linux).
 
 Downgrading warning
 ---------------------
@@ -262,7 +262,7 @@ createrawtransaction.
 
 bitcoin-tx is a newly introduced command line utility designed to enable easy
 manipulation of bitcoin transactions. A summary of its operation may be
-obtained via "bitcoin-tx --help" Transactions may be created or signed in a
+obtained via "PWRcoin-tx --help" Transactions may be created or signed in a
 manner similar to the RPC raw tx API. Transactions may be updated, deleting
 inputs or outputs, or appending new inputs and outputs. Custom scripts may be
 easily composed using a simple text notation, borrowed from the bitcoin test
@@ -273,7 +273,7 @@ multi-party transactions, and many other uses. Long term, the goal is to
 deprecate and remove "pure function" RPC API calls, as those do not require a
 server round-trip to execute.
 
-Other utilities "bitcoin-key" and "bitcoin-script" have been proposed, making
+Other utilities "PWRcoin-key" and "PWRcoin-script" have been proposed, making
 key and script operations easily accessible via command line.
 
 Mining and relay policy enhancements
@@ -391,7 +391,7 @@ Command-line options:
 - `4278b1d` Clarify error message when invalid -rpcallowip
 - `6b407e4` -datadir is now allowed in config files
 - `bdd5b58` Add option `-sysperms` to disable 077 umask (create new files with system default umask)
-- `cbe39a3` Add "bitcoin-tx" command line utility and supporting modules
+- `cbe39a3` Add "PWRcoin-tx" command line utility and supporting modules
 - `dbca89b` Trigger -alertnotify if network is upgrading without you
 - `ad96e7c` Make -reindex cope with out-of-order blocks
 - `16d5194` Skip reindexed blocks individually
@@ -624,7 +624,7 @@ Tests:
 Miscellaneous:
 - `122549f` Fix incorrect checkpoint data for testnet3
 - `5bd02cf` Log used config file to debug.log on startup
-- `68ba85f` Updated Debian example bitcoin.conf with config from wiki + removed some cruft and updated comments
+- `68ba85f` Updated Debian example pwrcoin.conf with config from wiki + removed some cruft and updated comments
 - `e5ee8f0` Remove -beta suffix
 - `38405ac` Add comment regarding experimental-use service bits
 - `be873f6` Issue warning if collecting RandSeed data failed

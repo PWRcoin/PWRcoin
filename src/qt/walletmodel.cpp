@@ -65,10 +65,7 @@ WalletModel::~WalletModel()
 void WalletModel::startPollBalance()
 {
     // This timer will be fired repeatedly to update the balance
-    // Since the QTimer::timeout is a private signal, it cannot be used
-    // in the GUIUtil::ExceptionSafeConnect directly.
-    connect(timer, &QTimer::timeout, this, &WalletModel::timerTimeout);
-    GUIUtil::ExceptionSafeConnect(this, &WalletModel::timerTimeout, this, &WalletModel::pollBalanceChanged);
+    connect(timer, &QTimer::timeout, this, &WalletModel::pollBalanceChanged);
     timer->start(MODEL_UPDATE_DELAY);
 }
 
@@ -248,7 +245,7 @@ WalletModel::SendCoinsReturn WalletModel::sendCoins(WalletModelTransaction &tran
 
         CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
         ssTx << *newTx;
-        transaction_array.append((const char*)ssTx.data(), ssTx.size());
+        transaction_array.append((const char*)&(ssTx[0]), ssTx.size());
     }
 
     // Add addresses / update labels that we've sent to the address book,

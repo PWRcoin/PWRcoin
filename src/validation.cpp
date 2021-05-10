@@ -21,7 +21,6 @@
 #include <index/txindex.h>
 #include <logging.h>
 #include <logging/timer.h>
-#include <node/blockstorage.h>
 #include <node/coinstats.h>
 #include <node/ui_interface.h>
 #include <policy/policy.h>
@@ -66,6 +65,10 @@
 static const unsigned int EXTRA_DESCENDANT_TX_SIZE_LIMIT = 10000;
 /** Maximum kilobytes for transactions to store for processing during reorg */
 static const unsigned int MAX_DISCONNECTED_TX_POOL_SIZE = 20000;
+/** The pre-allocation chunk size for blk?????.dat files (since 0.8) */
+static const unsigned int BLOCKFILE_CHUNK_SIZE = 0x1000000; // 16 MiB
+/** The pre-allocation chunk size for rev?????.dat files (since 0.8) */
+static const unsigned int UNDOFILE_CHUNK_SIZE = 0x100000; // 1 MiB
 /** Time to wait between writing blocks/block index to disk. */
 static constexpr std::chrono::hours DATABASE_WRITE_INTERVAL{1};
 /** Time to wait between flushing chainstate to disk. */
@@ -131,9 +134,14 @@ Mutex g_best_block_mutex;
 std::condition_variable g_best_block_cv;
 uint256 g_best_block;
 bool g_parallel_script_checks{false};
+std::atomic_bool fImporting(false);
+std::atomic_bool fReindex(false);
+bool fHavePruned = false;
+bool fPruneMode = false;
 bool fRequireStandard = true;
 bool fCheckBlockIndex = false;
 bool fCheckpointsEnabled = DEFAULT_CHECKPOINTS_ENABLED;
+uint64_t nPruneTarget = 0;
 int64_t nMaxTipAge = DEFAULT_MAX_TIP_AGE;
 
 uint256 hashAssumeValid;
@@ -144,17 +152,22 @@ CFeeRate minRelayTxFee = CFeeRate(DEFAULT_MIN_RELAY_TX_FEE);
 // Internal stuff
 namespace {
     CBlockIndex* pindexBestInvalid = nullptr;
-} // namespace
 
-// Internal stuff from blockstorage ...
-extern RecursiveMutex cs_LastBlockFile;
-extern std::vector<CBlockFileInfo> vinfoBlockFile;
-extern int nLastBlockFile;
-extern bool fCheckForPruning;
-extern std::set<CBlockIndex*> setDirtyBlockIndex;
-extern std::set<int> setDirtyFileInfo;
-void FlushBlockFile(bool fFinalize = false, bool finalize_undo = false);
-// ... TODO move fully to blockstorage
+    RecursiveMutex cs_LastBlockFile;
+    std::vector<CBlockFileInfo> vinfoBlockFile;
+    int nLastBlockFile = 0;
+    /** Global flag to indicate we should check to see if there are
+     *  block/undo files that should be deleted.  Set on startup
+     *  or if we allocate more file space when we're in prune mode
+     */
+    bool fCheckForPruning = false;
+
+    /** Dirty block index entries. */
+    std::set<CBlockIndex*> setDirtyBlockIndex;
+
+    /** Dirty block file entries. */
+    std::set<int> setDirtyFileInfo;
+} // anon namespace
 
 CBlockIndex* BlockManager::LookupBlockIndex(const uint256& hash) const
 {
@@ -191,6 +204,9 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
                        bool cacheFullScriptStore, PrecomputedTransactionData& txdata,
                        std::vector<CScriptCheck>* pvChecks = nullptr)
                        EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+static FILE* OpenUndoFile(const FlatFilePos &pos, bool fReadOnly = false);
+static FlatFileSeq BlockFileSeq();
+static FlatFileSeq UndoFileSeq();
 
 bool CheckFinalTx(const CBlockIndex* active_chain_tip, const CTransaction &tx, int flags)
 {
@@ -1132,6 +1148,123 @@ CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMe
     return nullptr;
 }
 
+//////////////////////////////////////////////////////////////////////////////
+//
+// CBlock and CBlockIndex
+//
+
+static bool WriteBlockToDisk(const CBlock& block, FlatFilePos& pos, const CMessageHeader::MessageStartChars& messageStart)
+{
+    // Open history file to append
+    CAutoFile fileout(OpenBlockFile(pos), SER_DISK, CLIENT_VERSION);
+    if (fileout.IsNull())
+        return error("WriteBlockToDisk: OpenBlockFile failed");
+
+    // Write index header
+    unsigned int nSize = GetSerializeSize(block, fileout.GetVersion());
+    fileout << messageStart << nSize;
+
+    // Write block
+    long fileOutPos = ftell(fileout.Get());
+    if (fileOutPos < 0)
+        return error("WriteBlockToDisk: ftell failed");
+    pos.nPos = (unsigned int)fileOutPos;
+    fileout << block;
+
+    return true;
+}
+
+bool ReadBlockFromDisk(CBlock& block, const FlatFilePos& pos, const Consensus::Params& consensusParams)
+{
+    block.SetNull();
+
+    // Open history file to read
+    CAutoFile filein(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION);
+    if (filein.IsNull())
+        return error("ReadBlockFromDisk: OpenBlockFile failed for %s", pos.ToString());
+
+    // Read block
+    try {
+        filein >> block;
+    }
+    catch (const std::exception& e) {
+        return error("%s: Deserialize or I/O error - %s at %s", __func__, e.what(), pos.ToString());
+    }
+
+    // Check the header
+    if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
+        return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
+
+    // Signet only: check block solution
+    if (consensusParams.signet_blocks && !CheckSignetBlockSolution(block, consensusParams)) {
+        return error("ReadBlockFromDisk: Errors in block solution at %s", pos.ToString());
+    }
+
+    return true;
+}
+
+bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex, const Consensus::Params& consensusParams)
+{
+    FlatFilePos blockPos;
+    {
+        LOCK(cs_main);
+        blockPos = pindex->GetBlockPos();
+    }
+
+    if (!ReadBlockFromDisk(block, blockPos, consensusParams))
+        return false;
+    if (block.GetHash() != pindex->GetBlockHash())
+        return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s",
+                pindex->ToString(), pindex->GetBlockPos().ToString());
+    return true;
+}
+
+bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const FlatFilePos& pos, const CMessageHeader::MessageStartChars& message_start)
+{
+    FlatFilePos hpos = pos;
+    hpos.nPos -= 8; // Seek back 8 bytes for meta header
+    CAutoFile filein(OpenBlockFile(hpos, true), SER_DISK, CLIENT_VERSION);
+    if (filein.IsNull()) {
+        return error("%s: OpenBlockFile failed for %s", __func__, pos.ToString());
+    }
+
+    try {
+        CMessageHeader::MessageStartChars blk_start;
+        unsigned int blk_size;
+
+        filein >> blk_start >> blk_size;
+
+        if (memcmp(blk_start, message_start, CMessageHeader::MESSAGE_START_SIZE)) {
+            return error("%s: Block magic mismatch for %s: %s versus expected %s", __func__, pos.ToString(),
+                    HexStr(blk_start),
+                    HexStr(message_start));
+        }
+
+        if (blk_size > MAX_SIZE) {
+            return error("%s: Block data is larger than maximum deserialization size for %s: %s versus %s", __func__, pos.ToString(),
+                    blk_size, MAX_SIZE);
+        }
+
+        block.resize(blk_size); // Zeroing of memory is intentional here
+        filein.read((char*)block.data(), blk_size);
+    } catch(const std::exception& e) {
+        return error("%s: Read from block file failed: %s for %s", __func__, e.what(), pos.ToString());
+    }
+
+    return true;
+}
+
+bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const CBlockIndex* pindex, const CMessageHeader::MessageStartChars& message_start)
+{
+    FlatFilePos block_pos;
+    {
+        LOCK(cs_main);
+        block_pos = pindex->GetBlockPos();
+    }
+
+    return ReadRawBlockFromDisk(block, block_pos, message_start);
+}
+
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
     int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
@@ -1445,7 +1578,78 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
     return true;
 }
 
-bool AbortNode(BlockValidationState& state, const std::string& strMessage, const bilingual_str& userMessage)
+static bool UndoWriteToDisk(const CBlockUndo& blockundo, FlatFilePos& pos, const uint256& hashBlock, const CMessageHeader::MessageStartChars& messageStart)
+{
+    // Open history file to append
+    CAutoFile fileout(OpenUndoFile(pos), SER_DISK, CLIENT_VERSION);
+    if (fileout.IsNull())
+        return error("%s: OpenUndoFile failed", __func__);
+
+    // Write index header
+    unsigned int nSize = GetSerializeSize(blockundo, fileout.GetVersion());
+    fileout << messageStart << nSize;
+
+    // Write undo data
+    long fileOutPos = ftell(fileout.Get());
+    if (fileOutPos < 0)
+        return error("%s: ftell failed", __func__);
+    pos.nPos = (unsigned int)fileOutPos;
+    fileout << blockundo;
+
+    // calculate & write checksum
+    CHashWriter hasher(SER_GETHASH, PROTOCOL_VERSION);
+    hasher << hashBlock;
+    hasher << blockundo;
+    fileout << hasher.GetHash();
+
+    return true;
+}
+
+bool UndoReadFromDisk(CBlockUndo& blockundo, const CBlockIndex* pindex)
+{
+    FlatFilePos pos = pindex->GetUndoPos();
+    if (pos.IsNull()) {
+        return error("%s: no undo data available", __func__);
+    }
+
+    // Open history file to read
+    CAutoFile filein(OpenUndoFile(pos, true), SER_DISK, CLIENT_VERSION);
+    if (filein.IsNull())
+        return error("%s: OpenUndoFile failed", __func__);
+
+    // Read block
+    uint256 hashChecksum;
+    CHashVerifier<CAutoFile> verifier(&filein); // We need a CHashVerifier as reserializing may lose data
+    try {
+        verifier << pindex->pprev->GetBlockHash();
+        verifier >> blockundo;
+        filein >> hashChecksum;
+    }
+    catch (const std::exception& e) {
+        return error("%s: Deserialize or I/O error - %s", __func__, e.what());
+    }
+
+    // Verify checksum
+    if (hashChecksum != verifier.GetHash())
+        return error("%s: Checksum mismatch", __func__);
+
+    return true;
+}
+
+/** Abort with a message */
+static bool AbortNode(const std::string& strMessage, bilingual_str user_message = bilingual_str())
+{
+    SetMiscWarning(Untranslated(strMessage));
+    LogPrintf("*** %s\n", strMessage);
+    if (user_message.empty()) {
+        user_message = _("A fatal internal error occurred, see debug.log for details");
+    }
+    AbortError(user_message);
+    StartShutdown();
+    return false;
+}
+
+static bool AbortNode(BlockValidationState& state, const std::string& strMessage, const bilingual_str& userMessage = bilingual_str())
 {
     AbortNode(strMessage, userMessage);
     return state.Error(strMessage);
@@ -1543,6 +1747,55 @@ DisconnectResult CChainState::DisconnectBlock(const CBlock& block, const CBlockI
     view.SetBestBlock(pindex->pprev->GetBlockHash());
 
     return fClean ? DISCONNECT_OK : DISCONNECT_UNCLEAN;
+}
+
+static void FlushUndoFile(int block_file, bool finalize = false)
+{
+    FlatFilePos undo_pos_old(block_file, vinfoBlockFile[block_file].nUndoSize);
+    if (!UndoFileSeq().Flush(undo_pos_old, finalize)) {
+        AbortNode("Flushing undo file to disk failed. This is likely the result of an I/O error.");
+    }
+}
+
+static void FlushBlockFile(bool fFinalize = false, bool finalize_undo = false)
+{
+    LOCK(cs_LastBlockFile);
+    FlatFilePos block_pos_old(nLastBlockFile, vinfoBlockFile[nLastBlockFile].nSize);
+    if (!BlockFileSeq().Flush(block_pos_old, fFinalize)) {
+        AbortNode("Flushing block file to disk failed. This is likely the result of an I/O error.");
+    }
+    // we do not always flush the undo file, as the chain tip may be lagging behind the incoming blocks,
+    // e.g. during IBD or a sync after a node going offline
+    if (!fFinalize || finalize_undo) FlushUndoFile(nLastBlockFile, finalize_undo);
+}
+
+static bool FindUndoPos(BlockValidationState &state, int nFile, FlatFilePos &pos, unsigned int nAddSize);
+
+static bool WriteUndoDataForBlock(const CBlockUndo& blockundo, BlockValidationState& state, CBlockIndex* pindex, const CChainParams& chainparams)
+{
+    // Write undo information to disk
+    if (pindex->GetUndoPos().IsNull()) {
+        FlatFilePos _pos;
+        if (!FindUndoPos(state, pindex->nFile, _pos, ::GetSerializeSize(blockundo, CLIENT_VERSION) + 40))
+            return error("ConnectBlock(): FindUndoPos failed");
+        if (!UndoWriteToDisk(blockundo, _pos, pindex->pprev->GetBlockHash(), chainparams.MessageStart()))
+            return AbortNode(state, "Failed to write undo data");
+        // rev files are written in block height order, whereas blk files are written as blocks come in (often out of order)
+        // we want to flush the rev (undo) file once we've written the last block, which is indicated by the last height
+        // in the block file info as below; note that this does not catch the case where the undo writes are keeping up
+        // with the block writes (usually when a synced up node is getting newly mined blocks) -- this case is caught in
+        // the FindBlockPos function
+        if (_pos.nFile < nLastBlockFile && static_cast<uint32_t>(pindex->nHeight) == vinfoBlockFile[_pos.nFile].nHeightLast) {
+            FlushUndoFile(_pos.nFile, true);
+        }
+
+        // update nUndoPos in block index
+        pindex->nUndoPos = _pos.nPos;
+        pindex->nStatus |= BLOCK_HAVE_UNDO;
+        setDirtyBlockIndex.insert(pindex);
+    }
+
+    return true;
 }
 
 static CCheckQueue<CScriptCheck> scriptcheckqueue(128);
@@ -2080,7 +2333,7 @@ bool CChainState::FlushStateToDisk(
         // Write blocks and block index to disk.
         if (fDoFullFlush || fPeriodicWrite) {
             // Depend on nMinDiskSpace to ensure we can write block index
-            if (!CheckDiskSpace(gArgs.GetBlocksDirPath())) {
+            if (!CheckDiskSpace(GetBlocksDir())) {
                 return AbortNode(state, "Disk space is too low!", _("Disk space is too low!"));
             }
             {
@@ -2978,6 +3231,83 @@ void CChainState::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pi
     }
 }
 
+static bool FindBlockPos(FlatFilePos &pos, unsigned int nAddSize, unsigned int nHeight, CChain& active_chain, uint64_t nTime, bool fKnown = false)
+{
+    LOCK(cs_LastBlockFile);
+
+    unsigned int nFile = fKnown ? pos.nFile : nLastBlockFile;
+    if (vinfoBlockFile.size() <= nFile) {
+        vinfoBlockFile.resize(nFile + 1);
+    }
+
+    bool finalize_undo = false;
+    if (!fKnown) {
+        while (vinfoBlockFile[nFile].nSize + nAddSize >= (gArgs.GetBoolArg("-fastprune", false) ? 0x10000 /* 64kb */ : MAX_BLOCKFILE_SIZE)) {
+            // when the undo file is keeping up with the block file, we want to flush it explicitly
+            // when it is lagging behind (more blocks arrive than are being connected), we let the
+            // undo block write case handle it
+            assert(std::addressof(::ChainActive()) == std::addressof(active_chain));
+            finalize_undo = (vinfoBlockFile[nFile].nHeightLast == (unsigned int)active_chain.Tip()->nHeight);
+            nFile++;
+            if (vinfoBlockFile.size() <= nFile) {
+                vinfoBlockFile.resize(nFile + 1);
+            }
+        }
+        pos.nFile = nFile;
+        pos.nPos = vinfoBlockFile[nFile].nSize;
+    }
+
+    if ((int)nFile != nLastBlockFile) {
+        if (!fKnown) {
+            LogPrint(BCLog::VALIDATION, "Leaving block file %i: %s\n", nLastBlockFile, vinfoBlockFile[nLastBlockFile].ToString());
+        }
+        FlushBlockFile(!fKnown, finalize_undo);
+        nLastBlockFile = nFile;
+    }
+
+    vinfoBlockFile[nFile].AddBlock(nHeight, nTime);
+    if (fKnown)
+        vinfoBlockFile[nFile].nSize = std::max(pos.nPos + nAddSize, vinfoBlockFile[nFile].nSize);
+    else
+        vinfoBlockFile[nFile].nSize += nAddSize;
+
+    if (!fKnown) {
+        bool out_of_space;
+        size_t bytes_allocated = BlockFileSeq().Allocate(pos, nAddSize, out_of_space);
+        if (out_of_space) {
+            return AbortNode("Disk space is too low!", _("Disk space is too low!"));
+        }
+        if (bytes_allocated != 0 && fPruneMode) {
+            fCheckForPruning = true;
+        }
+    }
+
+    setDirtyFileInfo.insert(nFile);
+    return true;
+}
+
+static bool FindUndoPos(BlockValidationState &state, int nFile, FlatFilePos &pos, unsigned int nAddSize)
+{
+    pos.nFile = nFile;
+
+    LOCK(cs_LastBlockFile);
+
+    pos.nPos = vinfoBlockFile[nFile].nUndoSize;
+    vinfoBlockFile[nFile].nUndoSize += nAddSize;
+    setDirtyFileInfo.insert(nFile);
+
+    bool out_of_space;
+    size_t bytes_allocated = UndoFileSeq().Allocate(pos, nAddSize, out_of_space);
+    if (out_of_space) {
+        return AbortNode(state, "Disk space is too low!", _("Disk space is too low!"));
+    }
+    if (bytes_allocated != 0 && fPruneMode) {
+        fCheckForPruning = true;
+    }
+
+    return true;
+}
+
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
     // Check proof of work matches claimed amount
@@ -3379,6 +3709,25 @@ bool ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& 
 }
 
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
+static FlatFilePos SaveBlockToDisk(const CBlock& block, int nHeight, CChain& active_chain, const CChainParams& chainparams, const FlatFilePos* dbp) {
+    unsigned int nBlockSize = ::GetSerializeSize(block, CLIENT_VERSION);
+    FlatFilePos blockPos;
+    if (dbp != nullptr)
+        blockPos = *dbp;
+    if (!FindBlockPos(blockPos, nBlockSize+8, nHeight, active_chain, block.GetBlockTime(), dbp != nullptr)) {
+        error("%s: FindBlockPos failed", __func__);
+        return FlatFilePos();
+    }
+    if (dbp == nullptr) {
+        if (!WriteBlockToDisk(block, blockPos, chainparams.MessageStart())) {
+            AbortNode("Failed to write block");
+            return FlatFilePos();
+        }
+    }
+    return blockPos;
+}
+
+/** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
 bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock)
 {
     const CBlock& block = *pblock;
@@ -3535,6 +3884,18 @@ bool TestBlockValidity(BlockValidationState& state,
  * BLOCK PRUNING CODE
  */
 
+/* Calculate the amount of disk space the block & undo files currently use */
+uint64_t CalculateCurrentUsage()
+{
+    LOCK(cs_LastBlockFile);
+
+    uint64_t retval = 0;
+    for (const CBlockFileInfo &file : vinfoBlockFile) {
+        retval += file.nSize + file.nUndoSize;
+    }
+    return retval;
+}
+
 void BlockManager::PruneOneBlockFile(const int fileNumber)
 {
     AssertLockHeld(cs_main);
@@ -3567,6 +3928,17 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
 
     vinfoBlockFile[fileNumber].SetNull();
     setDirtyFileInfo.insert(fileNumber);
+}
+
+
+void UnlinkPrunedFiles(const std::set<int>& setFilesToPrune)
+{
+    for (std::set<int>::iterator it = setFilesToPrune.begin(); it != setFilesToPrune.end(); ++it) {
+        FlatFilePos pos(*it, 0);
+        fs::remove(BlockFileSeq().FileName(pos));
+        fs::remove(UndoFileSeq().FileName(pos));
+        LogPrintf("Prune: %s deleted blk/rev (%05u)\n", __func__, *it);
+    }
 }
 
 void BlockManager::FindFilesToPruneManual(std::set<int>& setFilesToPrune, int nManualPruneHeight, int chain_tip_height)
@@ -3661,6 +4033,30 @@ void BlockManager::FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPr
            nPruneTarget/1024/1024, nCurrentUsage/1024/1024,
            ((int64_t)nPruneTarget - (int64_t)nCurrentUsage)/1024/1024,
            nLastBlockWeCanPrune, count);
+}
+
+static FlatFileSeq BlockFileSeq()
+{
+    return FlatFileSeq(GetBlocksDir(), "blk", gArgs.GetBoolArg("-fastprune", false) ? 0x4000 /* 16kb */ : BLOCKFILE_CHUNK_SIZE);
+}
+
+static FlatFileSeq UndoFileSeq()
+{
+    return FlatFileSeq(GetBlocksDir(), "rev", UNDOFILE_CHUNK_SIZE);
+}
+
+FILE* OpenBlockFile(const FlatFilePos &pos, bool fReadOnly) {
+    return BlockFileSeq().Open(pos, fReadOnly);
+}
+
+/** Open an undo file (rev?????.dat) */
+static FILE* OpenUndoFile(const FlatFilePos &pos, bool fReadOnly) {
+    return UndoFileSeq().Open(pos, fReadOnly);
+}
+
+fs::path GetBlockPosFilename(const FlatFilePos &pos)
+{
+    return BlockFileSeq().FileName(pos);
 }
 
 CBlockIndex * BlockManager::InsertBlockIndex(const uint256& hash)
@@ -3844,7 +4240,7 @@ bool CChainState::LoadChainTip(const CChainParams& chainparams)
 
 CVerifyDB::CVerifyDB()
 {
-    uiInterface.ShowProgress(_("Verifying blocks…").translated, 0, false);
+    uiInterface.ShowProgress(_("Verifying blocks...").translated, 0, false);
 }
 
 CVerifyDB::~CVerifyDB()
@@ -3852,46 +4248,38 @@ CVerifyDB::~CVerifyDB()
     uiInterface.ShowProgress("", 100, false);
 }
 
-bool CVerifyDB::VerifyDB(
-    CChainState& chainstate,
-    const CChainParams& chainparams,
-    CCoinsView& coinsview,
-    int nCheckLevel, int nCheckDepth)
+bool CVerifyDB::VerifyDB(const CChainParams& chainparams, CChainState& active_chainstate, CCoinsView *coinsview, int nCheckLevel, int nCheckDepth)
 {
     AssertLockHeld(cs_main);
 
-    assert(std::addressof(::ChainstateActive()) == std::addressof(chainstate));
-    if (chainstate.m_chain.Tip() == nullptr || chainstate.m_chain.Tip()->pprev == nullptr)
+    assert(std::addressof(::ChainstateActive()) == std::addressof(active_chainstate));
+    if (active_chainstate.m_chain.Tip() == nullptr || active_chainstate.m_chain.Tip()->pprev == nullptr)
         return true;
 
     // Verify blocks in the best chain
-    if (nCheckDepth <= 0 || nCheckDepth > chainstate.m_chain.Height())
-        nCheckDepth = chainstate.m_chain.Height();
+    if (nCheckDepth <= 0 || nCheckDepth > active_chainstate.m_chain.Height())
+        nCheckDepth = active_chainstate.m_chain.Height();
     nCheckLevel = std::max(0, std::min(4, nCheckLevel));
     LogPrintf("Verifying last %i blocks at level %i\n", nCheckDepth, nCheckLevel);
-    CCoinsViewCache coins(&coinsview);
+    CCoinsViewCache coins(coinsview);
     CBlockIndex* pindex;
     CBlockIndex* pindexFailure = nullptr;
     int nGoodTransactions = 0;
     BlockValidationState state;
     int reportDone = 0;
     LogPrintf("[0%%]..."); /* Continued */
-
-    bool is_snapshot_cs = !chainstate.m_from_snapshot_blockhash.IsNull();
-
-    for (pindex = chainstate.m_chain.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
-        const int percentageDone = std::max(1, std::min(99, (int)(((double)(chainstate.m_chain.Height() - pindex->nHeight)) / (double)nCheckDepth * (nCheckLevel >= 4 ? 50 : 100))));
+    for (pindex = active_chainstate.m_chain.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
+        const int percentageDone = std::max(1, std::min(99, (int)(((double)(active_chainstate.m_chain.Height() - pindex->nHeight)) / (double)nCheckDepth * (nCheckLevel >= 4 ? 50 : 100))));
         if (reportDone < percentageDone/10) {
             // report every 10% step
             LogPrintf("[%d%%]...", percentageDone); /* Continued */
             reportDone = percentageDone/10;
         }
-        uiInterface.ShowProgress(_("Verifying blocks…").translated, percentageDone, false);
-        if (pindex->nHeight <= chainstate.m_chain.Height()-nCheckDepth)
+        uiInterface.ShowProgress(_("Verifying blocks...").translated, percentageDone, false);
+        if (pindex->nHeight <= active_chainstate.m_chain.Height()-nCheckDepth)
             break;
-        if ((fPruneMode || is_snapshot_cs) && !(pindex->nStatus & BLOCK_HAVE_DATA)) {
-            // If pruning or running under an assumeutxo snapshot, only go
-            // back as far as we have data.
+        if (fPruneMode && !(pindex->nStatus & BLOCK_HAVE_DATA)) {
+            // If pruning, only go back as far as we have data.
             LogPrintf("VerifyDB(): block verification stopping at height %d (pruning, no data)\n", pindex->nHeight);
             break;
         }
@@ -3913,11 +4301,9 @@ bool CVerifyDB::VerifyDB(
             }
         }
         // check level 3: check for inconsistencies during memory-only disconnect of tip blocks
-        size_t curr_coins_usage = coins.DynamicMemoryUsage() + chainstate.CoinsTip().DynamicMemoryUsage();
-
-        if (nCheckLevel >= 3 && curr_coins_usage <= chainstate.m_coinstip_cache_size_bytes) {
+        if (nCheckLevel >= 3 && (coins.DynamicMemoryUsage() + active_chainstate.CoinsTip().DynamicMemoryUsage()) <= active_chainstate.m_coinstip_cache_size_bytes) {
             assert(coins.GetBestBlock() == pindex->GetBlockHash());
-            DisconnectResult res = chainstate.DisconnectBlock(block, pindex, coins);
+            DisconnectResult res = active_chainstate.DisconnectBlock(block, pindex, coins);
             if (res == DISCONNECT_FAILED) {
                 return error("VerifyDB(): *** irrecoverable inconsistency in block data at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
             }
@@ -3931,26 +4317,26 @@ bool CVerifyDB::VerifyDB(
         if (ShutdownRequested()) return true;
     }
     if (pindexFailure)
-        return error("VerifyDB(): *** coin database inconsistencies found (last %i blocks, %i good transactions before that)\n", chainstate.m_chain.Height() - pindexFailure->nHeight + 1, nGoodTransactions);
+        return error("VerifyDB(): *** coin database inconsistencies found (last %i blocks, %i good transactions before that)\n", active_chainstate.m_chain.Height() - pindexFailure->nHeight + 1, nGoodTransactions);
 
     // store block count as we move pindex at check level >= 4
-    int block_count = chainstate.m_chain.Height() - pindex->nHeight;
+    int block_count = active_chainstate.m_chain.Height() - pindex->nHeight;
 
     // check level 4: try reconnecting blocks
     if (nCheckLevel >= 4) {
-        while (pindex != chainstate.m_chain.Tip()) {
-            const int percentageDone = std::max(1, std::min(99, 100 - (int)(((double)(chainstate.m_chain.Height() - pindex->nHeight)) / (double)nCheckDepth * 50)));
+        while (pindex != active_chainstate.m_chain.Tip()) {
+            const int percentageDone = std::max(1, std::min(99, 100 - (int)(((double)(active_chainstate.m_chain.Height() - pindex->nHeight)) / (double)nCheckDepth * 50)));
             if (reportDone < percentageDone/10) {
                 // report every 10% step
                 LogPrintf("[%d%%]...", percentageDone); /* Continued */
                 reportDone = percentageDone/10;
             }
-            uiInterface.ShowProgress(_("Verifying blocks…").translated, percentageDone, false);
-            pindex = chainstate.m_chain.Next(pindex);
+            uiInterface.ShowProgress(_("Verifying blocks...").translated, percentageDone, false);
+            pindex = active_chainstate.m_chain.Next(pindex);
             CBlock block;
             if (!ReadBlockFromDisk(block, pindex, chainparams.GetConsensus()))
                 return error("VerifyDB(): *** ReadBlockFromDisk failed at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
-            if (!chainstate.ConnectBlock(block, state, pindex, coins, chainparams))
+            if (!active_chainstate.ConnectBlock(block, state, pindex, coins, chainparams))
                 return error("VerifyDB(): *** found unconnectable block at %d, hash=%s (%s)", pindex->nHeight, pindex->GetBlockHash().ToString(), state.ToString());
             if (ShutdownRequested()) return true;
         }
@@ -3994,7 +4380,7 @@ bool CChainState::ReplayBlocks(const CChainParams& params)
     if (hashHeads.empty()) return true; // We're already in a consistent state.
     if (hashHeads.size() != 2) return error("ReplayBlocks(): unknown inconsistent state");
 
-    uiInterface.ShowProgress(_("Replaying blocks…").translated, 0, false);
+    uiInterface.ShowProgress(_("Replaying blocks...").translated, 0, false);
     LogPrintf("Replaying blocks\n");
 
     const CBlockIndex* pindexOld = nullptr;  // Old tip during the interrupted flush.
@@ -4040,7 +4426,7 @@ bool CChainState::ReplayBlocks(const CChainParams& params)
     for (int nHeight = nForkHeight + 1; nHeight <= pindexNew->nHeight; ++nHeight) {
         const CBlockIndex* pindex = pindexNew->GetAncestor(nHeight);
         LogPrintf("Rolling forward %s (%i)\n", pindex->GetBlockHash().ToString(), nHeight);
-        uiInterface.ShowProgress(_("Replaying blocks…").translated, (int) ((nHeight - nForkHeight) * 100.0 / (pindexNew->nHeight - nForkHeight)) , false);
+        uiInterface.ShowProgress(_("Replaying blocks...").translated, (int) ((nHeight - nForkHeight) * 100.0 / (pindexNew->nHeight - nForkHeight)) , false);
         if (!RollforwardBlock(pindex, cache, params)) return false;
     }
 
@@ -4050,23 +4436,143 @@ bool CChainState::ReplayBlocks(const CChainParams& params)
     return true;
 }
 
-bool CChainState::NeedsRedownload(const CChainParams& params) const
+//! Helper for CChainState::RewindBlockIndex
+void CChainState::EraseBlockData(CBlockIndex* index)
 {
     AssertLockHeld(cs_main);
+    assert(!m_chain.Contains(index)); // Make sure this block isn't active
 
-    // At and above params.SegwitHeight, segwit consensus rules must be validated
-    CBlockIndex* block{m_chain.Tip()};
-    const int segwit_height{params.GetConsensus().SegwitHeight};
-
-    while (block != nullptr && block->nHeight >= segwit_height) {
-        if (!(block->nStatus & BLOCK_OPT_WITNESS)) {
-            // block is insufficiently validated for a segwit client
-            return true;
+    // Reduce validity
+    index->nStatus = std::min<unsigned int>(index->nStatus & BLOCK_VALID_MASK, BLOCK_VALID_TREE) | (index->nStatus & ~BLOCK_VALID_MASK);
+    // Remove have-data flags.
+    index->nStatus &= ~(BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO);
+    // Remove storage location.
+    index->nFile = 0;
+    index->nDataPos = 0;
+    index->nUndoPos = 0;
+    // Remove various other things
+    index->nTx = 0;
+    index->nChainTx = 0;
+    index->nSequenceId = 0;
+    // Make sure it gets written.
+    setDirtyBlockIndex.insert(index);
+    // Update indexes
+    setBlockIndexCandidates.erase(index);
+    auto ret = m_blockman.m_blocks_unlinked.equal_range(index->pprev);
+    while (ret.first != ret.second) {
+        if (ret.first->second == index) {
+            m_blockman.m_blocks_unlinked.erase(ret.first++);
+        } else {
+            ++ret.first;
         }
-        block = block->pprev;
+    }
+    // Mark parent as eligible for main chain again
+    if (index->pprev && index->pprev->IsValid(BLOCK_VALID_TRANSACTIONS) && index->pprev->HaveTxsDownloaded()) {
+        setBlockIndexCandidates.insert(index->pprev);
+    }
+}
+
+bool CChainState::RewindBlockIndex(const CChainParams& params)
+{
+    // Note that during -reindex-chainstate we are called with an empty m_chain!
+
+    // First erase all post-segwit blocks without witness not in the main chain,
+    // as this can we done without costly DisconnectTip calls. Active
+    // blocks will be dealt with below (releasing cs_main in between).
+    {
+        LOCK(cs_main);
+        for (const auto& entry : m_blockman.m_block_index) {
+            if (IsWitnessEnabled(entry.second->pprev, params.GetConsensus()) && !(entry.second->nStatus & BLOCK_OPT_WITNESS) && !m_chain.Contains(entry.second)) {
+                EraseBlockData(entry.second);
+            }
+        }
     }
 
-    return false;
+    // Find what height we need to reorganize to.
+    CBlockIndex *tip;
+    int nHeight = 1;
+    {
+        LOCK(cs_main);
+        while (nHeight <= m_chain.Height()) {
+            // Although SCRIPT_VERIFY_WITNESS is now generally enforced on all
+            // blocks in ConnectBlock, we don't need to go back and
+            // re-download/re-verify blocks from before segwit actually activated.
+            if (IsWitnessEnabled(m_chain[nHeight - 1], params.GetConsensus()) && !(m_chain[nHeight]->nStatus & BLOCK_OPT_WITNESS)) {
+                break;
+            }
+            nHeight++;
+        }
+
+        tip = m_chain.Tip();
+    }
+    // nHeight is now the height of the first insufficiently-validated block, or tipheight + 1
+
+    BlockValidationState state;
+    // Loop until the tip is below nHeight, or we reach a pruned block.
+    while (!ShutdownRequested()) {
+        {
+            LOCK(cs_main);
+            LOCK(m_mempool.cs);
+            // Make sure nothing changed from under us (this won't happen because RewindBlockIndex runs before importing/network are active)
+            assert(tip == m_chain.Tip());
+            if (tip == nullptr || tip->nHeight < nHeight) break;
+            if (fPruneMode && !(tip->nStatus & BLOCK_HAVE_DATA)) {
+                // If pruning, don't try rewinding past the HAVE_DATA point;
+                // since older blocks can't be served anyway, there's
+                // no need to walk further, and trying to DisconnectTip()
+                // will fail (and require a needless reindex/redownload
+                // of the blockchain).
+                break;
+            }
+
+            // Disconnect block
+            if (!DisconnectTip(state, params, nullptr)) {
+                return error("RewindBlockIndex: unable to disconnect block at height %i (%s)", tip->nHeight, state.ToString());
+            }
+
+            // Reduce validity flag and have-data flags.
+            // We do this after actual disconnecting, otherwise we'll end up writing the lack of data
+            // to disk before writing the chainstate, resulting in a failure to continue if interrupted.
+            // Note: If we encounter an insufficiently validated block that
+            // is on m_chain, it must be because we are a pruning node, and
+            // this block or some successor doesn't HAVE_DATA, so we were unable to
+            // rewind all the way.  Blocks remaining on m_chain at this point
+            // must not have their validity reduced.
+            EraseBlockData(tip);
+
+            tip = tip->pprev;
+        }
+        // Make sure the queue of validation callbacks doesn't grow unboundedly.
+        LimitValidationInterfaceQueue();
+
+        // Occasionally flush state to disk.
+        if (!FlushStateToDisk(params, state, FlushStateMode::PERIODIC)) {
+            LogPrintf("RewindBlockIndex: unable to flush state to disk (%s)\n", state.ToString());
+            return false;
+        }
+    }
+
+    {
+        LOCK(cs_main);
+        if (m_chain.Tip() != nullptr) {
+            // We can't prune block index candidates based on our tip if we have
+            // no tip due to m_chain being empty!
+            PruneBlockIndexCandidates();
+
+            CheckBlockIndex(params.GetConsensus());
+
+            // FlushStateToDisk can possibly read ::ChainActive(). Be conservative
+            // and skip it here, we're about to -reindex-chainstate anyway, so
+            // it'll get called a bunch real soon.
+            BlockValidationState state;
+            if (!FlushStateToDisk(params, state, FlushStateMode::ALWAYS)) {
+                LogPrintf("RewindBlockIndex: unable to flush state to disk (%s)\n", state.ToString());
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 void CChainState::UnloadBlockIndex() {
@@ -4495,6 +5001,18 @@ bool CChainState::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
     return ret;
 }
 
+std::string CBlockFileInfo::ToString() const
+{
+    return strprintf("CBlockFileInfo(blocks=%u, size=%u, heights=%u...%u, time=%s...%s)", nBlocks, nSize, nHeightFirst, nHeightLast, FormatISO8601Date(nTimeFirst), FormatISO8601Date(nTimeLast));
+}
+
+CBlockFileInfo* GetBlockFileInfo(size_t n)
+{
+    LOCK(cs_LastBlockFile);
+
+    return &vinfoBlockFile.at(n);
+}
+
 static const uint64_t MEMPOOL_DUMP_VERSION = 1;
 
 bool LoadMempool(CTxMemPool& pool, CChainState& active_chainstate, FopenFn mockable_fopen_function)
@@ -4827,12 +5345,12 @@ bool ChainstateManager::PopulateAndValidateSnapshot(
     while (coins_left > 0) {
         try {
             coins_file >> outpoint;
-            coins_file >> coin;
         } catch (const std::ios_base::failure&) {
-            LogPrintf("[snapshot] bad snapshot format or truncated snapshot after deserializing %d coins\n",
-                      coins_count - coins_left);
+            LogPrintf("[snapshot] bad snapshot - no coins left after deserializing %d coins\n",
+                coins_count - coins_left);
             return false;
         }
+        coins_file >> coin;
         coins_cache.EmplaceCoinInternalDANGER(std::move(outpoint), std::move(coin));
 
         --coins_left;
@@ -4914,14 +5432,14 @@ bool ChainstateManager::PopulateAndValidateSnapshot(
         return false;
     }
 
-    CCoinsStats stats{CoinStatsHashType::HASH_SERIALIZED};
+    CCoinsStats stats;
     auto breakpoint_fnc = [] { /* TODO insert breakpoint here? */ };
 
     // As above, okay to immediately release cs_main here since no other context knows
     // about the snapshot_chainstate.
     CCoinsViewDB* snapshot_coinsdb = WITH_LOCK(::cs_main, return &snapshot_chainstate.CoinsDB());
 
-    if (!GetUTXOStats(snapshot_coinsdb, WITH_LOCK(::cs_main, return std::ref(m_blockman)), stats, breakpoint_fnc)) {
+    if (!GetUTXOStats(snapshot_coinsdb, WITH_LOCK(::cs_main, return std::ref(m_blockman)), stats, CoinStatsHashType::HASH_SERIALIZED, breakpoint_fnc)) {
         LogPrintf("[snapshot] failed to generate coins stats\n");
         return false;
     }
@@ -4975,7 +5493,7 @@ bool ChainstateManager::PopulateAndValidateSnapshot(
     }
 
     assert(index);
-    index->nChainTx = au_data.nChainTx;
+    index->nChainTx = metadata.m_nchaintx;
     snapshot_chainstate.setBlockIndexCandidates.insert(snapshot_start_block);
 
     LogPrintf("[snapshot] validated snapshot (%.2f MB)\n",

@@ -77,14 +77,7 @@ extern uint256 ParseHashO(const UniValue& o, std::string strKey);
 extern std::vector<unsigned char> ParseHexV(const UniValue& v, std::string strName);
 extern std::vector<unsigned char> ParseHexO(const UniValue& o, std::string strKey);
 
-/**
- * Validate and return a CAmount from a UniValue number or string.
- *
- * @param[in] value     UniValue number or string to parse.
- * @param[in] decimals  Number of significant digits (default: 8).
- * @returns a CAmount if the various checks pass.
- */
-extern CAmount AmountFromValue(const UniValue& value, int decimals = 8);
+extern CAmount AmountFromValue(const UniValue& value);
 
 using RPCArgList = std::vector<std::pair<std::string, UniValue>>;
 extern std::string HelpExampleCli(const std::string& methodname, const std::string& args);
@@ -152,9 +145,7 @@ struct RPCArg {
          */
         OMITTED,
     };
-    using DefaultHint = std::string;
-    using Default = UniValue;
-    using Fallback = std::variant<Optional, /* hint for default value */ DefaultHint, /* default constant value */ Default>;
+    using Fallback = std::variant<Optional, /* default value for optional args */ std::string>;
     const std::string m_names; //!< The name of the arg (can be empty for inner args, can contain multiple aliases separated by | for named request arguments)
     const Type m_type;
     const bool m_hidden;
@@ -180,7 +171,7 @@ struct RPCArg {
           m_oneline_description{std::move(oneline_description)},
           m_type_str{std::move(type_str)}
     {
-        CHECK_NONFATAL(type != Type::ARR && type != Type::OBJ && type != Type::OBJ_USER_KEYS);
+        CHECK_NONFATAL(type != Type::ARR && type != Type::OBJ);
     }
 
     RPCArg(
@@ -200,7 +191,7 @@ struct RPCArg {
           m_oneline_description{std::move(oneline_description)},
           m_type_str{std::move(type_str)}
     {
-        CHECK_NONFATAL(type == Type::ARR || type == Type::OBJ || type == Type::OBJ_USER_KEYS);
+        CHECK_NONFATAL(type == Type::ARR || type == Type::OBJ);
     }
 
     bool IsOptional() const;

@@ -1,5 +1,5 @@
 ---
-name: "bitcoin-core-linux-22"
+name: "PWRcoin-core-linux-22"
 enable_cache: true
 distro: "ubuntu"
 suites:
@@ -23,7 +23,6 @@ packages:
 - "patch"
 - "pkg-config"
 - "python3"
-- "python3-pip"
 # Cross compilation HOSTS:
 #  - arm-linux-gnueabihf
 - "binutils-arm-linux-gnueabihf"
@@ -42,7 +41,7 @@ packages:
 - "g++-8-riscv64-linux-gnu"
 remotes:
 - "url": "https://github.com/bitcoin/bitcoin.git"
-  "dir": "bitcoin"
+  "dir": "PWRcoin"
 files: []
 script: |
   set -e -o pipefail
@@ -56,6 +55,7 @@ script: |
   HOST_CXXFLAGS="-O2 -g"
   HOST_LDFLAGS_BASE="-static-libstdc++ -Wl,-O2"
 
+  export QT_RCC_TEST=1
   export QT_RCC_SOURCE_DATE_OVERRIDE=1
   export TZ="UTC"
   export BUILD_DIR="$PWD"
@@ -99,8 +99,6 @@ script: |
     done
   done
   }
-
-  pip3 install lief==0.11.4
 
   # Faketime for depends so intermediate results are comparable
   export PATH_orig=${PATH}

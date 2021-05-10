@@ -175,6 +175,7 @@ case "$HOST" in
 esac
 
 # Environment variables for determinism
+export QT_RCC_TEST=1
 export QT_RCC_SOURCE_DATE_OVERRIDE=1
 export TAR_OPTIONS="--owner=0 --group=0 --numeric-owner --mtime='@${SOURCE_DATE_EPOCH}' --sort=name"
 export TZ="UTC"
@@ -255,7 +256,7 @@ case "$HOST" in
 esac
 
 case "$HOST" in
-    powerpc64-linux-*|riscv64-linux-*) HOST_LDFLAGS="${HOST_LDFLAGS} -Wl,-z,noexecstack" ;;
+    powerpc64-linux-*) HOST_LDFLAGS="${HOST_LDFLAGS} -Wl,-z,noexecstack" ;;
 esac
 
 # Make $HOST-specific native binaries from depends available in $PATH
