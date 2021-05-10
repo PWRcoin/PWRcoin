@@ -6,11 +6,10 @@
 
 #include <chain.h>
 #include <chainparams.h>
-#include <node/blockstorage.h>
 #include <rpc/server.h>
 #include <streams.h>
 #include <util/system.h>
-#include <validation.h> // For cs_main
+#include <validation.h>
 #include <zmq/zmqutil.h>
 
 #include <zmq.h>
@@ -168,7 +167,7 @@ bool CZMQAbstractPublishNotifier::SendZmqMessage(const char *command, const void
 
     /* send three parts, command & data & a LE 4byte sequence number */
     unsigned char msgseq[sizeof(uint32_t)];
-    WriteLE32(msgseq, nSequence);
+    WriteLE32(&msgseq[0], nSequence);
     int rc = zmq_send_multipart(psocket, command, strlen(command), data, size, msgseq, (size_t)sizeof(uint32_t), nullptr);
     if (rc == -1)
         return false;

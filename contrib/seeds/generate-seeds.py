@@ -16,7 +16,6 @@ These files must consist of lines in the format
     <ip>:<port>
     [<ipv6>]:<port>
     <onion>.onion:<port>
-    <i2p>.b32.i2p:<port>
 
 The output will be two data structures with the peers in binary format:
 
@@ -53,12 +52,6 @@ def name_to_bip155(addr):
             return (BIP155Network.TORV3, vchAddr[:32])
         else:
             raise ValueError('Invalid onion %s' % vchAddr)
-    elif addr.endswith('.b32.i2p'):
-        vchAddr = b32decode(addr[0:-8] + '====', True)
-        if len(vchAddr) == 32:
-            return (BIP155Network.I2P, vchAddr)
-        else:
-            raise ValueError(f'Invalid I2P {vchAddr}')
     elif '.' in addr: # IPv4
         return (BIP155Network.IPV4, bytes((int(x) for x in addr.split('.'))))
     elif ':' in addr: # IPv6

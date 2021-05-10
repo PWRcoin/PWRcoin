@@ -18,7 +18,7 @@ How to Upgrade
 If you are running an older version, shut it down. Wait until it has completely
 shut down (which might take a few minutes for older versions), then run the
 installer (on Windows) or just copy over /Applications/Bitcoin-Qt (on Mac) or
-bitcoind/bitcoin-qt (on Linux).
+bitcoind/pwrcoin-qt (on Linux).
 
 Downgrade warning
 ------------------
@@ -67,7 +67,7 @@ free transactions (with enough priority) will be accepted. It defaults to 15.
 Reducing this number reduces the speed at which the mempool can grow due
 to free transactions.
 
-For example, add the following to `bitcoin.conf`:
+For example, add the following to `pwrcoin.conf`:
 
     minrelaytxfee=0.00005 
     limitfreerelay=5

@@ -19,7 +19,7 @@ How to Upgrade
 If you are running an older version, shut it down. Wait until it has completely
 shut down (which might take a few minutes for older versions), then run the
 installer (on Windows) or just copy over `/Applications/Bitcoin-Qt` (on Mac)
-or `bitcoind`/`bitcoin-qt` (on Linux).
+or `bitcoind`/`pwrcoin-qt` (on Linux).
 
 If your node has a txindex, the txindex db will be migrated the first time you run 0.17.0 or newer, which may take up to a few hours. Your node will not be functional until this migration completes.
 
@@ -69,7 +69,7 @@ Changed configuration options
 -----------------------------
 
 - `-includeconf=<file>` can be used to include additional configuration files.
-  Only works inside the `bitcoin.conf` file, not inside included files or from
+  Only works inside the `pwrcoin.conf` file, not inside included files or from
   command-line. Multiple files may be included. Can be disabled from command-
   line via `-noincludeconf`. Note that multi-argument commands like
   `-includeconf` will override preceding `-noincludeconf`, i.e.
@@ -78,7 +78,7 @@ Changed configuration options
   includeconf=relative.conf
   ```
 
-  as bitcoin.conf will still include `relative.conf`.
+  as pwrcoin.conf will still include `relative.conf`.
 
 GUI changes
 -----------
@@ -109,7 +109,7 @@ same as before.
 Dynamic loading and creation of wallets
 ---------------------------------------
 
-Previously, wallets could only be loaded or created at startup, by specifying `-wallet` parameters on the command line or in the bitcoin.conf file. It is now possible to load, create and unload wallets dynamically at runtime:
+Previously, wallets could only be loaded or created at startup, by specifying `-wallet` parameters on the command line or in the pwrcoin.conf file. It is now possible to load, create and unload wallets dynamically at runtime:
 
 - Existing wallets can be loaded by calling the `loadwallet` RPC. The wallet can be specified as file/directory basename (which must be located in the `walletdir` directory), or as an absolute path to a file/directory.
 - New wallets can be created (and loaded) by calling the `createwallet` RPC. The provided name must not match a wallet file in the `walletdir` directory or the name of a wallet that is currently loaded.
@@ -633,7 +633,7 @@ Support for Python 2 has been discontinued for all test files and tools.
 - #13659 `90b1c7e` add missing leveldb defines (theuni)
 - #13368 `c0f1569` Update gitian-build.sh for docker (achow101)
 - #13171 `19d8ca5` Change gitian-descriptors to use bionic instead (ken2812221)
-- #13604 `75bea05` Add depends 32-bit arm support for bitcoin-qt (TheCharlatan)
+- #13604 `75bea05` Add depends 32-bit arm support for pwrcoin-qt (TheCharlatan)
 - #13623 `9cdb19f` Migrate gitian-build.sh to python (ken2812221)
 - #13689 `8c36432` disable Werror when building zmq (greenaddress)
 - #13617 `cf7f9ae` release: Require macos 10.10+ (fanquake)
@@ -641,7 +641,7 @@ Support for Python 2 has been discontinued for all test files and tools.
 - #13095 `415f2bf` update `ax_boost_chrono`/`unit_test_framework` (fanquake)
 - #13732 `e8ffec6` Fix Qt's rcc determinism (Fuzzbawls)
 - #13782 `8284f1d` Fix osslsigncode compile issue in gitian-build (ken2812221)
-- #13696 `2ab7208` Add aarch64 qt depends support for cross compiling bitcoin-qt (TheCharlatan)
+- #13696 `2ab7208` Add aarch64 qt depends support for cross compiling pwrcoin-qt (TheCharlatan)
 - #13705 `b413ba0` Add format string linter (practicalswift)
 - #14000 `48c8459` fix qt determinism (theuni)
 - #14018 `3e4829a` Bugfix: NSIS: Exclude `Makefile*` from docs (luke-jr)
@@ -657,7 +657,7 @@ Support for Python 2 has been discontinued for all test files and tools.
 - #12425 `26dc2da` Add some script tests (richardkiss)
 - #12455 `23481fa` Fix bip68 sequence test to reflect updated rpc error message (Empact)
 - #12477 `acd1e61` Plug memory leaks and stack-use-after-scope (MarcoFalke)
-- #12443 `07090c5` Move common args to bitcoin.conf (MarcoFalke)
+- #12443 `07090c5` Move common args to pwrcoin.conf (MarcoFalke)
 - #12570 `39dcac2` Add test cases for HexStr (`std::reverse_iterator` and corner cases) (kostaz)
 - #12582 `6012f1c` Fix ListCoins test failure due to unset `g_wallet_allow_fallback_fee` (ryanofsky)
 - #12516 `7f99964` Avoid unintentional unsigned integer wraparounds in tests (practicalswift)

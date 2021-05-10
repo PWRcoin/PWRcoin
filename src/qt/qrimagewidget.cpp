@@ -27,8 +27,12 @@ QRImageWidget::QRImageWidget(QWidget *parent):
     QLabel(parent), contextMenu(nullptr)
 {
     contextMenu = new QMenu(this);
-    contextMenu->addAction(tr("Save Image…"), this, &QRImageWidget::saveImage);
-    contextMenu->addAction(tr("Copy Image"), this, &QRImageWidget::copyImage);
+    QAction *saveImageAction = new QAction(tr("&Save Image..."), this);
+    connect(saveImageAction, &QAction::triggered, this, &QRImageWidget::saveImage);
+    contextMenu->addAction(saveImageAction);
+    QAction *copyImageAction = new QAction(tr("&Copy Image"), this);
+    connect(copyImageAction, &QAction::triggered, this, &QRImageWidget::copyImage);
+    contextMenu->addAction(copyImageAction);
 }
 
 bool QRImageWidget::setQR(const QString& data, const QString& text)

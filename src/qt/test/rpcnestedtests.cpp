@@ -35,16 +35,14 @@ static RPCHelpMan rpcNestedTest_rpc()
 }
 
 static const CRPCCommand vRPCCommands[] = {
-    {"rpcNestedTest", &rpcNestedTest_rpc},
+    {"test", &rpcNestedTest_rpc},
 };
 
 void RPCNestedTests::rpcNestedTests()
 {
     // do some test setup
     // could be moved to a more generic place when we add more tests on QT level
-    for (const auto& c : vRPCCommands) {
-        tableRPC.appendCommand(c.name, &c);
-    }
+    tableRPC.appendCommand("rpcNestedTest", &vRPCCommands[0]);
 
     TestingSetup test;
     m_node.setContext(&test.m_node);

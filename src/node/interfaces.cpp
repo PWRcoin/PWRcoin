@@ -4,6 +4,7 @@
 
 #include <addrdb.h>
 #include <banman.h>
+#include <boost/signals2/signal.hpp>
 #include <chain.h>
 #include <chainparams.h>
 #include <init.h>
@@ -16,7 +17,6 @@
 #include <net_processing.h>
 #include <netaddress.h>
 #include <netbase.h>
-#include <node/blockstorage.h>
 #include <node/coin.h>
 #include <node/context.h>
 #include <node/transaction.h>
@@ -52,8 +52,6 @@
 #include <memory>
 #include <optional>
 #include <utility>
-
-#include <boost/signals2/signal.hpp>
 
 using interfaces::BlockTip;
 using interfaces::Chain;

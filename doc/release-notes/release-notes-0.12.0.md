@@ -17,7 +17,7 @@ How to Upgrade
 If you are running an older version, shut it down. Wait until it has completely
 shut down (which might take a few minutes for older versions), then run the
 installer (on Windows) or just copy over /Applications/Bitcoin-Qt (on Mac) or
-bitcoind/bitcoin-qt (on Linux).
+bitcoind/pwrcoin-qt (on Linux).
 
 Downgrade warning
 -----------------
@@ -320,7 +320,7 @@ However, rescans as well as the RPCs `importwallet`, `importaddress`,
 `importprivkey` are disabled.
 
 To enable block pruning set `prune=<N>` on the command line or in
-`bitcoin.conf`, where `N` is the number of MiB to allot for
+`pwrcoin.conf`, where `N` is the number of MiB to allot for
 raw block & undo data.
 
 A value of 0 disables pruning. The minimal value above 0 is 550. Your

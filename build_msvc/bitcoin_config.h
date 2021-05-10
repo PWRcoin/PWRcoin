@@ -15,10 +15,10 @@
 #define CLIENT_VERSION_IS_RELEASE false
 
 /* Major version */
-#define CLIENT_VERSION_MAJOR 21
+#define CLIENT_VERSION_MAJOR 4
 
 /* Minor version */
-#define CLIENT_VERSION_MINOR 99
+#define CLIENT_VERSION_MINOR 0
 
 /* Copyright holder(s) before %s replacement */
 #define COPYRIGHT_HOLDERS "The %s developers"
@@ -27,7 +27,7 @@
 #define COPYRIGHT_HOLDERS_FINAL "The Bitcoin Core developers"
 
 /* Replacement for %s in copyright holders string */
-#define COPYRIGHT_HOLDERS_SUBSTITUTION "Bitcoin Core"
+#define COPYRIGHT_HOLDERS_SUBSTITUTION "PWRcoin Core"
 
 /* Copyright year */
 #define COPYRIGHT_YEAR 2019
@@ -251,13 +251,13 @@
 #define PACKAGE_BUGREPORT "https://github.com/bitcoin/bitcoin/issues"
 
 /* Define to the full name of this package. */
-#define PACKAGE_NAME "Bitcoin Core"
+#define PACKAGE_NAME "PWRcoin Core"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "Bitcoin Core 21.99.0"
+#define PACKAGE_STRING "PWRcoin Core 21.99.0"
 
 /* Define to the one symbol short name of this package. */
-#define PACKAGE_TARNAME "bitcoin"
+#define PACKAGE_TARNAME "PWRcoin"
 
 /* Define to the home page for this package. */
 #define PACKAGE_URL "https://bitcoincore.org/"

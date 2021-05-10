@@ -88,53 +88,21 @@ static constexpr bool IsSmallInteger(opcodetype opcode)
     return opcode >= OP_1 && opcode <= OP_16;
 }
 
-static constexpr bool IsPushdataOp(opcodetype opcode)
-{
-    return opcode > OP_FALSE && opcode <= OP_PUSHDATA4;
-}
-
-static constexpr bool IsValidMultisigKeyCount(int n_keys)
-{
-    return n_keys > 0 && n_keys <= MAX_PUBKEYS_PER_MULTISIG;
-}
-
-static bool GetMultisigKeyCount(opcodetype opcode, valtype data, int& count)
-{
-    if (IsSmallInteger(opcode)) {
-        count = CScript::DecodeOP_N(opcode);
-        return IsValidMultisigKeyCount(count);
-    }
-
-    if (IsPushdataOp(opcode)) {
-        if (!CheckMinimalPush(data, opcode)) return false;
-        try {
-            count = CScriptNum(data, /* fRequireMinimal = */ true).getint();
-            return IsValidMultisigKeyCount(count);
-        } catch (const scriptnum_error&) {
-            return false;
-        }
-    }
-
-    return false;
-}
-
-static bool MatchMultisig(const CScript& script, int& required_sigs, std::vector<valtype>& pubkeys)
+static bool MatchMultisig(const CScript& script, unsigned int& required, std::vector<valtype>& pubkeys)
 {
     opcodetype opcode;
     valtype data;
-    int num_keys;
-
     CScript::const_iterator it = script.begin();
     if (script.size() < 1 || script.back() != OP_CHECKMULTISIG) return false;
 
-    if (!script.GetOp(it, opcode, data) || !GetMultisigKeyCount(opcode, data, required_sigs)) return false;
+    if (!script.GetOp(it, opcode, data) || !IsSmallInteger(opcode)) return false;
+    required = CScript::DecodeOP_N(opcode);
     while (script.GetOp(it, opcode, data) && CPubKey::ValidSize(data)) {
         pubkeys.emplace_back(std::move(data));
     }
-    if (!GetMultisigKeyCount(opcode, data, num_keys)) return false;
-
-    if (pubkeys.size() != static_cast<unsigned long>(num_keys) || num_keys < required_sigs) return false;
-
+    if (!IsSmallInteger(opcode)) return false;
+    unsigned int keys = CScript::DecodeOP_N(opcode);
+    if (pubkeys.size() != keys || keys < required) return false;
     return (it + 1 == script.end());
 }
 
@@ -195,12 +163,12 @@ TxoutType Solver(const CScript& scriptPubKey, std::vector<std::vector<unsigned c
         return TxoutType::PUBKEYHASH;
     }
 
-    int required;
+    unsigned int required;
     std::vector<std::vector<unsigned char>> keys;
     if (MatchMultisig(scriptPubKey, required, keys)) {
-        vSolutionsRet.push_back({static_cast<unsigned char>(required)}); // safe as required is in range 1..20
+        vSolutionsRet.push_back({static_cast<unsigned char>(required)}); // safe as required is in range 1..16
         vSolutionsRet.insert(vSolutionsRet.end(), keys.begin(), keys.end());
-        vSolutionsRet.push_back({static_cast<unsigned char>(keys.size())}); // safe as size is in range 1..20
+        vSolutionsRet.push_back({static_cast<unsigned char>(keys.size())}); // safe as size is in range 1..16
         return TxoutType::MULTISIG;
     }
 
@@ -350,11 +318,10 @@ CScript GetScriptForMultisig(int nRequired, const std::vector<CPubKey>& keys)
 {
     CScript script;
 
-    script << nRequired;
+    script << CScript::EncodeOP_N(nRequired);
     for (const CPubKey& key : keys)
         script << ToByteVector(key);
-    script << keys.size() << OP_CHECKMULTISIG;
-
+    script << CScript::EncodeOP_N(keys.size()) << OP_CHECKMULTISIG;
     return script;
 }
 

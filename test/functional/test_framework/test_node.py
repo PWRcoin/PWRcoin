@@ -74,7 +74,7 @@ class TestNode():
         self.index = i
         self.p2p_conn_index = 1
         self.datadir = datadir
-        self.bitcoinconf = os.path.join(self.datadir, "bitcoin.conf")
+        self.bitcoinconf = os.path.join(self.datadir, "PWRcoin.conf")
         self.stdout_dir = os.path.join(self.datadir, "stdout")
         self.stderr_dir = os.path.join(self.datadir, "stderr")
         self.chain = chain
@@ -91,7 +91,7 @@ class TestNode():
         # Note that common args are set in the config file (see initialize_datadir)
         self.extra_args = extra_args
         self.version = version
-        # Configuration for logging is set as command-line args rather than in the bitcoin.conf file.
+        # Configuration for logging is set as command-line args rather than in the pwrcoin.conf file.
         # This means that starting a bitcoind using the temp dir to debug a failed test won't
         # spam debug.log.
         self.args = [
@@ -210,7 +210,7 @@ class TestNode():
         self.process = subprocess.Popen(self.args + extra_args, env=subp_env, stdout=stdout, stderr=stderr, cwd=cwd, **kwargs)
 
         self.running = True
-        self.log.debug("bitcoind started, waiting for RPC to come up")
+        self.log.debug("PWRcoind started, waiting for RPC to come up")
 
         if self.start_perf:
             self._start_perf()
@@ -491,7 +491,6 @@ class TestNode():
                 self.start(extra_args, stdout=log_stdout, stderr=log_stderr, *args, **kwargs)
                 ret = self.process.wait(timeout=self.rpc_timeout)
                 self.log.debug(self._node_msg(f'bitcoind exited with status {ret} during initialization'))
-                assert ret != 0  # Exit code must indicate failure
                 self.running = False
                 self.process = None
                 # Check stderr for expected message

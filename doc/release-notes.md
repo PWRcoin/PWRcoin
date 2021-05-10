@@ -36,7 +36,7 @@ How to Upgrade
 If you are running an older version, shut it down. Wait until it has completely
 shut down (which might take a few minutes in some cases), then run the
 installer (on Windows) or just copy over `/Applications/Bitcoin-Qt` (on Mac)
-or `bitcoind`/`bitcoin-qt` (on Linux).
+or `bitcoind`/`pwrcoin-qt` (on Linux).
 
 Upgrading directly from a version of Bitcoin Core that has reached its EOL is
 possible, but it might take some time if the data directory needs to be migrated. Old
@@ -136,12 +136,6 @@ Changes to Wallet or GUI related settings can be found in the GUI or Wallet sect
 Tools and Utilities
 -------------------
 
-- A new CLI `-addrinfo` command returns the number of addresses known to the
-  node per network type (including Tor v2 versus v3) and total. This can be
-  useful to see if the node knows enough addresses in a network to use options
-  like `-onlynet=<network>` or to upgrade to current and future Tor releases
-  that support Tor v3 addresses only.  (#21595)
-
 Wallet
 ------
 
@@ -151,11 +145,6 @@ Wallet
 
 - The `bumpfee` RPC is not available with wallets that have private keys
   disabled. `psbtbumpfee` can be used instead. (#20891)
-
-- The `fundrawtransaction`, `send` and `walletcreatefundedpsbt` RPCs now support an `include_unsafe` option
-  that when `true` allows using unsafe inputs to fund the transaction.
-  Note that the resulting transaction may become invalid if one of the unsafe inputs disappears.
-  If that happens, the transaction must be funded with different inputs and republished. (#21359)
 
 GUI changes
 -----------

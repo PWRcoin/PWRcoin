@@ -4,16 +4,15 @@
 
 #include <chainparams.h>
 #include <index/base.h>
-#include <node/blockstorage.h>
 #include <node/ui_interface.h>
 #include <shutdown.h>
 #include <tinyformat.h>
 #include <util/system.h>
 #include <util/translation.h>
-#include <validation.h> // For g_chainman
+#include <validation.h>
 #include <warnings.h>
 
-constexpr uint8_t DB_BEST_BLOCK{'B'};
+constexpr char DB_BEST_BLOCK = 'B';
 
 constexpr int64_t SYNC_LOG_INTERVAL = 30; // seconds
 constexpr int64_t SYNC_LOCATOR_WRITE_INTERVAL = 30; // seconds

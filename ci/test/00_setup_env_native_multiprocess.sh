@@ -8,10 +8,9 @@ export LC_ALL=C.UTF-8
 
 export CONTAINER_NAME=ci_native_multiprocess
 export DOCKER_NAME_TAG=ubuntu:20.04
-export PACKAGES="cmake python3 python3-pip llvm clang"
-export DEP_OPTS="DEBUG=1 MULTIPROCESS=1"
+export PACKAGES="cmake python3"
+export DEP_OPTS="MULTIPROCESS=1"
 export GOAL="install"
-export BITCOIN_CONFIG="--enable-external-signer --enable-debug CC=clang CXX=clang++"  # Use clang to avoid OOM
-export TEST_RUNNER_ENV="BITCOIND=bitcoin-node"
+export BITCOIN_CONFIG="--with-boost-process"
+export TEST_RUNNER_ENV="PWRcoinD=bitcoin-node"
 export RUN_SECURITY_TESTS="true"
-export PIP_PACKAGES="lief"

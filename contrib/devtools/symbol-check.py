@@ -15,7 +15,6 @@ import sys
 import os
 from typing import List, Optional
 
-import lief
 import pixie
 
 # Debian 8 (Jessie) EOL: 2020. https://wiki.debian.org/DebianReleases#Production_Releases
@@ -53,10 +52,12 @@ IGNORE_EXPORTS = {
 'environ', '_environ', '__environ',
 }
 CPPFILT_CMD = os.getenv('CPPFILT', '/usr/bin/c++filt')
+OBJDUMP_CMD = os.getenv('OBJDUMP', '/usr/bin/objdump')
+OTOOL_CMD = os.getenv('OTOOL', '/usr/bin/otool')
 
 # Allowed NEEDED libraries
 ELF_ALLOWED_LIBRARIES = {
-# bitcoind and bitcoin-qt
+# bitcoind and pwrcoin-qt
 'libgcc_s.so.1', # GCC base support
 'libc.so.6', # C library
 'libpthread.so.0', # threading
@@ -70,7 +71,7 @@ ELF_ALLOWED_LIBRARIES = {
 'ld64.so.1', # POWER64 ABIv1 dynamic linker
 'ld64.so.2', # POWER64 ABIv2 dynamic linker
 'ld-linux-riscv64-lp64d.so.1', # 64-bit RISC-V dynamic linker
-# bitcoin-qt only
+# pwrcoin-qt only
 'libxcb.so.1', # part of X11
 'libxkbcommon.so.0', # keyboard keymapping
 'libxkbcommon-x11.so.0', # keyboard keymapping
@@ -88,10 +89,10 @@ pixie.EM_RISCV:  (2,27)
 }
 
 MACHO_ALLOWED_LIBRARIES = {
-# bitcoind and bitcoin-qt
+# bitcoind and pwrcoin-qt
 'libc++.1.dylib', # C++ Standard Library
 'libSystem.B.dylib', # libc, libm, libpthread, libinfo
-# bitcoin-qt only
+# pwrcoin-qt only
 'AppKit', # user interface
 'ApplicationServices', # common application tasks.
 'Carbon', # deprecated c back-compat API
@@ -118,7 +119,7 @@ PE_ALLOWED_LIBRARIES = {
 'SHELL32.dll', # shell API
 'USER32.dll', # user interface
 'WS2_32.dll', # sockets
-# bitcoin-qt only
+# pwrcoin-qt only
 'dwmapi.dll', # desktop window manager
 'GDI32.dll', # graphics device interface
 'IMM32.dll', # input method editor
@@ -202,22 +203,44 @@ def check_ELF_libraries(filename) -> bool:
             ok = False
     return ok
 
+def macho_read_libraries(filename) -> List[str]:
+    p = subprocess.Popen([OTOOL_CMD, '-L', filename], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, universal_newlines=True)
+    (stdout, stderr) = p.communicate()
+    if p.returncode:
+        raise IOError('Error opening file')
+    libraries = []
+    for line in stdout.splitlines():
+        tokens = line.split()
+        if len(tokens) == 1: # skip executable name
+            continue
+        libraries.append(tokens[0].split('/')[-1])
+    return libraries
+
 def check_MACHO_libraries(filename) -> bool:
     ok: bool = True
-    binary = lief.parse(filename)
-    for dylib in binary.libraries:
-        split = dylib.name.split('/')
-        if split[-1] not in MACHO_ALLOWED_LIBRARIES:
-            print(f'{split[-1]} is not in ALLOWED_LIBRARIES!')
+    for dylib in macho_read_libraries(filename):
+        if dylib not in MACHO_ALLOWED_LIBRARIES:
+            print('{} is not in ALLOWED_LIBRARIES!'.format(dylib))
             ok = False
     return ok
 
+def pe_read_libraries(filename) -> List[str]:
+    p = subprocess.Popen([OBJDUMP_CMD, '-x', filename], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, universal_newlines=True)
+    (stdout, stderr) = p.communicate()
+    if p.returncode:
+        raise IOError('Error opening file')
+    libraries = []
+    for line in stdout.splitlines():
+        if 'DLL Name:' in line:
+            tokens = line.split(': ')
+            libraries.append(tokens[1])
+    return libraries
+
 def check_PE_libraries(filename) -> bool:
     ok: bool = True
-    binary = lief.parse(filename)
-    for dylib in binary.libraries:
+    for dylib in pe_read_libraries(filename):
         if dylib not in PE_ALLOWED_LIBRARIES:
-            print(f'{dylib} is not in ALLOWED_LIBRARIES!')
+            print('{} is not in ALLOWED_LIBRARIES!'.format(dylib))
             ok = False
     return ok
 
@@ -252,7 +275,7 @@ if __name__ == '__main__':
         try:
             etype = identify_executable(filename)
             if etype is None:
-                print(f'{filename}: unknown format')
+                print('{}: unknown format'.format(filename))
                 retval = 1
                 continue
 
@@ -261,9 +284,9 @@ if __name__ == '__main__':
                 if not func(filename):
                     failed.append(name)
             if failed:
-                print(f'{filename}: failed {" ".join(failed)}')
+                print('{}: failed {}'.format(filename, ' '.join(failed)))
                 retval = 1
         except IOError:
-            print(f'{filename}: cannot open')
+            print('{}: cannot open'.format(filename))
             retval = 1
     sys.exit(retval)
