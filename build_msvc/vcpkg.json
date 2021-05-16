@@ -1,5 +1,5 @@
 {
-  "name": "bitcoin-core",
+  "name": "PWRcoin-core",
   "version-string": "1",
   "dependencies": [
     "berkeleydb",

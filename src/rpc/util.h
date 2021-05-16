@@ -145,9 +145,7 @@ struct RPCArg {
          */
         OMITTED,
     };
-    using DefaultHint = std::string;
-    using Default = UniValue;
-    using Fallback = std::variant<Optional, /* hint for default value */ DefaultHint, /* default constant value */ Default>;
+    using Fallback = std::variant<Optional, /* default value for optional args */ std::string>;
     const std::string m_names; //!< The name of the arg (can be empty for inner args, can contain multiple aliases separated by | for named request arguments)
     const Type m_type;
     const bool m_hidden;

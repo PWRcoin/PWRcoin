@@ -129,8 +129,6 @@ SendCoinsDialog::SendCoinsDialog(const PlatformStyle *_platformStyle, QWidget *p
     ui->customFee->SetAllowEmpty(false);
     ui->customFee->setValue(settings.value("nTransactionFee").toLongLong());
     minimizeFeeSection(settings.value("fFeeSectionMinimized").toBool());
-
-    GUIUtil::ExceptionSafeConnect(ui->sendButton, &QPushButton::clicked, this, &SendCoinsDialog::sendButtonClicked);
 }
 
 void SendCoinsDialog::setClientModel(ClientModel *_clientModel)
@@ -377,7 +375,7 @@ bool SendCoinsDialog::PrepareSendText(QString& question_string, QString& informa
     return true;
 }
 
-void SendCoinsDialog::sendButtonClicked([[maybe_unused]] bool checked)
+void SendCoinsDialog::on_sendButton_clicked()
 {
     if(!model || !model->getOptionsModel())
         return;

@@ -307,6 +307,9 @@ BOOST_AUTO_TEST_CASE(cnetaddr_basic)
     BOOST_REQUIRE(addr.IsValid());
     BOOST_REQUIRE(addr.IsIPv6());
     BOOST_CHECK(!addr.IsBindAny());
+    const std::string addr_str{addr.ToString()};
+    BOOST_CHECK(addr_str == scoped_addr || addr_str == "fe80:0:0:0:0:0:0:1");
+    // The fallback case "fe80:0:0:0:0:0:0:1" is needed for macOS 10.14/10.15 and (probably) later.
     // Test that the delimiter "%" and default zone id of 0 can be omitted for the default scope.
     BOOST_REQUIRE(LookupHost(link_local + "%0", addr, false));
     BOOST_REQUIRE(addr.IsValid());
@@ -580,7 +583,7 @@ BOOST_AUTO_TEST_CASE(cnetaddr_unserialize_v2)
     s << MakeSpan(ParseHex(
         "02"                                  // network type (IPv6)
         "10"                                  // address length
-        "fd6b88c08724ca978112ca1bbdcafac2")); // address: 0xfd + sha256("bitcoin")[0:5] +
+        "fd6b88c08724ca978112ca1bbdcafac2")); // address: 0xfd + sha256("PWRcoin")[0:5] +
                                               // sha256(name)[0:10]
     s >> addr;
     BOOST_CHECK(addr.IsInternal());

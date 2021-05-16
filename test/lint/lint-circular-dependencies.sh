@@ -11,9 +11,7 @@ export LC_ALL=C
 EXPECTED_CIRCULAR_DEPENDENCIES=(
     "chainparamsbase -> util/system -> chainparamsbase"
     "index/txindex -> validation -> index/txindex"
-    "node/blockstorage -> validation -> node/blockstorage"
-    "index/blockfilterindex -> node/blockstorage -> validation -> index/blockfilterindex"
-    "index/base -> validation -> index/blockfilterindex -> index/base"
+    "index/blockfilterindex -> validation -> index/blockfilterindex"
     "policy/fees -> txmempool -> policy/fees"
     "qt/addresstablemodel -> qt/walletmodel -> qt/addresstablemodel"
     "qt/bitcoingui -> qt/walletframe -> qt/bitcoingui"

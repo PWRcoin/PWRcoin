@@ -45,12 +45,10 @@
 #include <QApplication>
 #include <QDebug>
 #include <QFontDatabase>
-#include <QLatin1String>
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QMessageBox>
 #include <QSettings>
-#include <QStringBuilder>
 #include <QThread>
 #include <QTimer>
 #include <QTranslator>
@@ -198,7 +196,7 @@ void BitcoinCore::shutdown()
 }
 
 static int qt_argc = 1;
-static const char* qt_argv = "bitcoin-qt";
+static const char* qt_argv = "PWRcoin-qt";
 
 BitcoinApplication::BitcoinApplication():
     QApplication(qt_argc, const_cast<char **>(&qt_argv)),
@@ -419,21 +417,8 @@ void BitcoinApplication::shutdownResult()
 
 void BitcoinApplication::handleRunawayException(const QString &message)
 {
-    QMessageBox::critical(
-        nullptr, tr("Runaway exception"),
-        tr("A fatal error occurred. %1 can no longer continue safely and will quit.").arg(PACKAGE_NAME) %
-        QLatin1String("<br><br>") % GUIUtil::MakeHtmlLink(message, PACKAGE_BUGREPORT));
+    QMessageBox::critical(nullptr, "Runaway exception", BitcoinGUI::tr("A fatal error occurred. %1 can no longer continue safely and will quit.").arg(PACKAGE_NAME) + QString("<br><br>") + message);
     ::exit(EXIT_FAILURE);
-}
-
-void BitcoinApplication::handleNonFatalException(const QString& message)
-{
-    assert(QThread::currentThread() == thread());
-    QMessageBox::warning(
-        nullptr, tr("Internal error"),
-        tr("An internal error occurred. %1 will attempt to continue safely. This is "
-           "an unexpected bug which can be reported as described below.").arg(PACKAGE_NAME) %
-        QLatin1String("<br><br>") % GUIUtil::MakeHtmlLink(message, PACKAGE_BUGREPORT));
 }
 
 WId BitcoinApplication::getMainWinId() const
@@ -537,7 +522,7 @@ int GuiMain(int argc, char* argv[])
     // Gracefully exit if the user cancels
     if (!Intro::showIfNeeded(did_show_intro, prune)) return EXIT_SUCCESS;
 
-    /// 6. Determine availability of data directory and parse bitcoin.conf
+    /// 6. Determine availability of data directory and parse pwrcoin.conf
     /// - Do not call GetDataDir(true) before this step finishes
     if (!CheckDataDirOption()) {
         InitError(strprintf(Untranslated("Specified data directory \"%s\" does not exist.\n"), gArgs.GetArg("-datadir", "")));

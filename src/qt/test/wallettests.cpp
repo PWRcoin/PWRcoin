@@ -73,7 +73,7 @@ uint256 SendCoins(CWallet& wallet, SendCoinsDialog& sendCoinsDialog, const CTxDe
         if (status == CT_NEW) txid = hash;
     }));
     ConfirmSend();
-    bool invoked = QMetaObject::invokeMethod(&sendCoinsDialog, "sendButtonClicked", Q_ARG(bool, false));
+    bool invoked = QMetaObject::invokeMethod(&sendCoinsDialog, "on_sendButton_clicked");
     assert(invoked);
     return txid;
 }
@@ -128,9 +128,9 @@ void BumpFee(TransactionView& view, const uint256& txid, bool expectDisabled, st
 //
 // This also requires overriding the default minimal Qt platform:
 //
-//     QT_QPA_PLATFORM=xcb     src/qt/test/test_bitcoin-qt  # Linux
-//     QT_QPA_PLATFORM=windows src/qt/test/test_bitcoin-qt  # Windows
-//     QT_QPA_PLATFORM=cocoa   src/qt/test/test_bitcoin-qt  # macOS
+//     QT_QPA_PLATFORM=xcb     src/qt/test/test_pwrcoin-qt  # Linux
+//     QT_QPA_PLATFORM=windows src/qt/test/test_pwrcoin-qt  # Windows
+//     QT_QPA_PLATFORM=cocoa   src/qt/test/test_pwrcoin-qt  # macOS
 void TestGUI(interfaces::Node& node)
 {
     // Set up wallet and chain with 105 blocks (5 mature blocks for spending).
@@ -231,7 +231,7 @@ void TestGUI(interfaces::Node& node)
             QCOMPARE(receiveRequestDialog->QObject::findChild<QLabel*>("payment_header")->text(), QString("Payment information"));
             QCOMPARE(receiveRequestDialog->QObject::findChild<QLabel*>("uri_tag")->text(), QString("URI:"));
             QString uri = receiveRequestDialog->QObject::findChild<QLabel*>("uri_content")->text();
-            QCOMPARE(uri.count("bitcoin:"), 2);
+            QCOMPARE(uri.count("PWRcoin:"), 2);
             QCOMPARE(receiveRequestDialog->QObject::findChild<QLabel*>("address_tag")->text(), QString("Address:"));
 
             QCOMPARE(uri.count("amount=0.00000001"), 2);
@@ -278,7 +278,7 @@ void WalletTests::walletTests()
         // and fails to handle returned nulls
         // (https://bugreports.qt.io/browse/QTBUG-49686).
         QWARN("Skipping WalletTests on mac build with 'minimal' platform set due to Qt bugs. To run AppTests, invoke "
-              "with 'QT_QPA_PLATFORM=cocoa test_bitcoin-qt' on mac, or else use a linux or windows build.");
+              "with 'QT_QPA_PLATFORM=cocoa test_pwrcoin-qt' on mac, or else use a linux or windows build.");
         return;
     }
 #endif

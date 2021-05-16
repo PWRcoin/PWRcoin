@@ -73,7 +73,7 @@
 // Application startup time (used for uptime calculation)
 const int64_t nStartupTime = GetTime();
 
-const char * const BITCOIN_CONF_FILENAME = "bitcoin.conf";
+const char * const BITCOIN_CONF_FILENAME = "PWRcoin.conf";
 const char * const BITCOIN_SETTINGS_FILENAME = "settings.json";
 
 ArgsManager gArgs;
@@ -235,19 +235,6 @@ static bool CheckValid(const std::string& key, const util::SettingsValue& val, u
     return true;
 }
 
-namespace {
-fs::path StripRedundantLastElementsOfPath(const fs::path& path)
-{
-    auto result = path;
-    while (result.filename().string() == ".") {
-        result = result.parent_path();
-    }
-
-    assert(fs::equivalent(result, path));
-    return result;
-}
-} // namespace
-
 // Define default constructor and destructor that are not inline, so code instantiating this class doesn't need to
 // #include class definitions for all members.
 // For example, m_settings has an internal dependency on univalue.
@@ -388,72 +375,6 @@ std::optional<unsigned int> ArgsManager::GetArgFlags(const std::string& name) co
     return std::nullopt;
 }
 
-const fs::path& ArgsManager::GetBlocksDirPath()
-{
-    LOCK(cs_args);
-    fs::path& path = m_cached_blocks_path;
-
-    // Cache the path to avoid calling fs::create_directories on every call of
-    // this function
-    if (!path.empty()) return path;
-
-    if (IsArgSet("-blocksdir")) {
-        path = fs::system_complete(GetArg("-blocksdir", ""));
-        if (!fs::is_directory(path)) {
-            path = "";
-            return path;
-        }
-    } else {
-        path = GetDataDirPath(false);
-    }
-
-    path /= BaseParams().DataDir();
-    path /= "blocks";
-    fs::create_directories(path);
-    path = StripRedundantLastElementsOfPath(path);
-    return path;
-}
-
-const fs::path& ArgsManager::GetDataDirPath(bool net_specific) const
-{
-    LOCK(cs_args);
-    fs::path& path = net_specific ? m_cached_network_datadir_path : m_cached_datadir_path;
-
-    // Cache the path to avoid calling fs::create_directories on every call of
-    // this function
-    if (!path.empty()) return path;
-
-    std::string datadir = GetArg("-datadir", "");
-    if (!datadir.empty()) {
-        path = fs::system_complete(datadir);
-        if (!fs::is_directory(path)) {
-            path = "";
-            return path;
-        }
-    } else {
-        path = GetDefaultDataDir();
-    }
-    if (net_specific)
-        path /= BaseParams().DataDir();
-
-    if (fs::create_directories(path)) {
-        // This is the first run, create wallets subdirectory too
-        fs::create_directories(path / "wallets");
-    }
-
-    path = StripRedundantLastElementsOfPath(path);
-    return path;
-}
-
-void ArgsManager::ClearPathCache()
-{
-    LOCK(cs_args);
-
-    m_cached_datadir_path = fs::path();
-    m_cached_network_datadir_path = fs::path();
-    m_cached_blocks_path = fs::path();
-}
-
 std::optional<const ArgsManager::Command> ArgsManager::GetCommand() const
 {
     Command ret;
@@ -513,7 +434,7 @@ bool ArgsManager::GetSettingsPath(fs::path* filepath, bool temp) const
     }
     if (filepath) {
         std::string settings = GetArg("-settings", BITCOIN_SETTINGS_FILENAME);
-        *filepath = fsbridge::AbsPathJoin(GetDataDirPath(/* net_specific= */ true), temp ? settings + ".tmp" : settings);
+        *filepath = fsbridge::AbsPathJoin(GetDataDir(/* net_specific= */ true), temp ? settings + ".tmp" : settings);
     }
     return true;
 }
@@ -760,7 +681,7 @@ static std::string FormatException(const std::exception* pex, const char* pszThr
     char pszModule[MAX_PATH] = "";
     GetModuleFileNameA(nullptr, pszModule, sizeof(pszModule));
 #else
-    const char* pszModule = "bitcoin";
+    const char* pszModule = "PWRcoin";
 #endif
     if (pex)
         return strprintf(
@@ -779,12 +700,12 @@ void PrintExceptionContinue(const std::exception* pex, const char* pszThread)
 
 fs::path GetDefaultDataDir()
 {
-    // Windows: C:\Users\Username\AppData\Roaming\Bitcoin
-    // macOS: ~/Library/Application Support/Bitcoin
-    // Unix-like: ~/.bitcoin
+    // Windows: C:\Users\Username\AppData\Roaming\PWRcoin
+    // macOS: ~/Library/Application Support/PWRcoin
+    // Unix-like: ~/.PWRcoin
 #ifdef WIN32
     // Windows
-    return GetSpecialFolderPath(CSIDL_APPDATA) / "Bitcoin";
+    return GetSpecialFolderPath(CSIDL_APPDATA) / "PWRcoin";
 #else
     fs::path pathRet;
     char* pszHome = getenv("HOME");
@@ -794,23 +715,102 @@ fs::path GetDefaultDataDir()
         pathRet = fs::path(pszHome);
 #ifdef MAC_OSX
     // macOS
-    return pathRet / "Library/Application Support/Bitcoin";
+    return pathRet / "Library/Application Support/PWRcoin";
 #else
     // Unix-like
-    return pathRet / ".bitcoin";
+    return pathRet / ".PWRcoin";
 #endif
 #endif
 }
 
+namespace {
+fs::path StripRedundantLastElementsOfPath(const fs::path& path)
+{
+    auto result = path;
+    while (result.filename().string() == ".") {
+        result = result.parent_path();
+    }
+
+    assert(fs::equivalent(result, path));
+    return result;
+}
+} // namespace
+
+static fs::path g_blocks_path_cache_net_specific;
+static fs::path pathCached;
+static fs::path pathCachedNetSpecific;
+static RecursiveMutex csPathCached;
+
+const fs::path &GetBlocksDir()
+{
+    LOCK(csPathCached);
+    fs::path &path = g_blocks_path_cache_net_specific;
+
+    // Cache the path to avoid calling fs::create_directories on every call of
+    // this function
+    if (!path.empty()) return path;
+
+    if (gArgs.IsArgSet("-blocksdir")) {
+        path = fs::system_complete(gArgs.GetArg("-blocksdir", ""));
+        if (!fs::is_directory(path)) {
+            path = "";
+            return path;
+        }
+    } else {
+        path = GetDataDir(false);
+    }
+
+    path /= BaseParams().DataDir();
+    path /= "blocks";
+    fs::create_directories(path);
+    path = StripRedundantLastElementsOfPath(path);
+    return path;
+}
+
 const fs::path &GetDataDir(bool fNetSpecific)
 {
-    return gArgs.GetDataDirPath(fNetSpecific);
+    LOCK(csPathCached);
+    fs::path &path = fNetSpecific ? pathCachedNetSpecific : pathCached;
+
+    // Cache the path to avoid calling fs::create_directories on every call of
+    // this function
+    if (!path.empty()) return path;
+
+    std::string datadir = gArgs.GetArg("-datadir", "");
+    if (!datadir.empty()) {
+        path = fs::system_complete(datadir);
+        if (!fs::is_directory(path)) {
+            path = "";
+            return path;
+        }
+    } else {
+        path = GetDefaultDataDir();
+    }
+    if (fNetSpecific)
+        path /= BaseParams().DataDir();
+
+    if (fs::create_directories(path)) {
+        // This is the first run, create wallets subdirectory too
+        fs::create_directories(path / "wallets");
+    }
+
+    path = StripRedundantLastElementsOfPath(path);
+    return path;
 }
 
 bool CheckDataDirOption()
 {
     std::string datadir = gArgs.GetArg("-datadir", "");
     return datadir.empty() || fs::is_directory(fs::system_complete(datadir));
+}
+
+void ClearDatadirCache()
+{
+    LOCK(csPathCached);
+
+    pathCached = fs::path();
+    pathCachedNetSpecific = fs::path();
+    g_blocks_path_cache_net_specific = fs::path();
 }
 
 fs::path GetConfigFile(const std::string& confPath)
@@ -971,7 +971,7 @@ bool ArgsManager::ReadConfigFiles(std::string& error, bool ignore_invalid_keys)
     }
 
     // If datadir is changed in .conf file:
-    gArgs.ClearPathCache();
+    ClearDatadirCache();
     if (!CheckDataDirOption()) {
         error = strprintf("specified data directory \"%s\" does not exist.", GetArg("-datadir", ""));
         return false;
@@ -1344,7 +1344,7 @@ std::string CopyrightHolders(const std::string& strPrefix)
     std::string strCopyrightHolders = strPrefix + copyright_devs;
 
     // Make sure Bitcoin Core copyright is not removed by accident
-    if (copyright_devs.find("Bitcoin Core") == std::string::npos) {
+    if (copyright_devs.find("PWRcoin Core") == std::string::npos) {
         strCopyrightHolders += "\n" + strPrefix + "The Bitcoin Core developers";
     }
     return strCopyrightHolders;

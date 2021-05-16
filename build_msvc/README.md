@@ -27,11 +27,7 @@ Options for installing the dependencies in a Visual Studio compatible manner are
 - Download the source code, build each dependency, add the required include paths, link libraries and binary tools to the Visual Studio project files.
 - Use [nuget](https://www.nuget.org/) packages with the understanding that any binary files have been compiled by an untrusted third party.
 
-The [external dependencies](https://github.com/bitcoin/bitcoin/blob/master/doc/dependencies.md) required for building are listed in the `build_msvc/vcpkg.json` file. To ensure `msbuild` project files automatically install the `vcpkg` dependencies use:
-
-```
-vcpkg integrate install
-```
+The [external dependencies](https://github.com/bitcoin/bitcoin/blob/master/doc/dependencies.md) required for building are listed in the `build_msvc/vcpkg.json` file. The `msbuild` project files are configured to automatically install the `vcpkg` dependencies.
 
 Qt
 ---------------------
@@ -41,7 +37,7 @@ Some prebuilt x64 versions of Qt can be downloaded from [here](https://github.co
 
 To determine which Qt prebuilt version to download open the `.appveyor.yml` file and note the `QT_DOWNLOAD_URL`. When extracting the zip file the destination path must be set to `C:\`. This is due to the way that Qt includes, libraries and tools use internal paths.
 
-To build Bitcoin Core without Qt unload or disable the `bitcoin-qt`, `libbitcoin_qt` and `test_bitcoin-qt` projects.
+To build Bitcoin Core without Qt unload or disable the `pwrcoin-qt`, `libbitcoin_qt` and `test_pwrcoin-qt` projects.
 
 Building
 ---------------------

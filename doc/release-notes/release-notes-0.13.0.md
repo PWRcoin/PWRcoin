@@ -48,7 +48,7 @@ For this reason the default was changed to 300 MiB in this release.
 For nodes on low-memory systems, the database cache can be changed back to
 100 MiB (or to another value) by either:
 
-- Adding `dbcache=100` in bitcoin.conf
+- Adding `dbcache=100` in pwrcoin.conf
 - Changing it in the GUI under `Options → Size of database cache`
 
 Note that the database cache setting has the most performance impact
@@ -540,7 +540,7 @@ git merge commit are mentioned.
 - #7604 `354b03d` build: Remove spurious dollar sign. Fixes #7189 (dooglus)
 - #7605 `7f001bd` Remove openssl info from init/log and from Qt debug window (jonasschnelli)
 - #7628 `87d6562` Add 'copy full transaction details' option (ericshawlinux)
-- #7613 `3798e5d` Add autocomplete to bitcoin-qt's console window (GamerSg)
+- #7613 `3798e5d` Add autocomplete to pwrcoin-qt's console window (GamerSg)
 - #7668 `b24266c` Fix history deletion bug after font size change (achow101)
 - #7680 `41d2dfa` Remove reflection from `about` icon (laanwj)
 - #7686 `f034bce` Remove 0-fee from send dialog (MarcoFalke)
@@ -559,7 +559,7 @@ git merge commit are mentioned.
 - #8129 `ee1533e` Fix RPC console auto completer (UdjinM6)
 - #7636 `fb0ac48` Add bitcoin address label to request payment QR code (makevoid)
 - #8231 `760a6c7` Fix a bug where the SplashScreen will not be hidden during startup (jonasschnelli)
-- #8256 `af2421c` BUG: bitcoin-qt crash (fsb4000)
+- #8256 `af2421c` BUG: pwrcoin-qt crash (fsb4000)
 - #8257 `ff03c50` Do not ask a UI question from bitcoind (sipa)
 - #8288 `91abb77` Network-specific example address (laanwj)
 - #7707 `a914968` UI support for abandoned transactions (jonasschnelli)
