@@ -571,7 +571,7 @@ def bitcoin_cli(basecmd, args, **kwargs):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cli", default="bitcoin-cli", type=str, help="bitcoin-cli command")
+    parser.add_argument("--cli", default="PWRcoin-cli", type=str, help="PWRcoin-cli command")
     parser.add_argument("--debug", action="store_true", help="Print debugging info")
     parser.add_argument("--quiet", action="store_true", help="Only print warnings/errors")
 

@@ -836,7 +836,7 @@
         <translation>Aproximadamente %1 GB de información será almacenado en este directorio.</translation>
     </message>
     <message>
-        <source>%1 will download and store a copy of the Bitcoin block chain.</source>
+        <source>%1 will download and store a copy of the PWRcoin block chain.</source>
         <translation>%1 descargará y almacenará una copia del blockchain de Bitcoin.</translation>
     </message>
     <message>
@@ -867,11 +867,11 @@
         <translation>Formulario</translation>
     </message>
     <message>
-        <source>Recent transactions may not yet be visible, and therefore your wallet's balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the bitcoin network, as detailed below.</source>
+        <source>Recent transactions may not yet be visible, and therefore your wallet's balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the PWRcoin network, as detailed below.</source>
         <translation>Las transacciones recientes aún no pueden ser visibles, y por lo tanto el saldo de su monedero podría ser incorrecto. Esta información será correcta cuando su monedero haya terminado de sincronizarse con la red de bitcoin, como se detalla abajo.</translation>
     </message>
     <message>
-        <source>Attempting to spend bitcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
+        <source>Attempting to spend pwrcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
         <translation>La red no aceptará el intentar gastar bitcoins que están afectados por transacciones aún no mostradas.</translation>
     </message>
     <message>

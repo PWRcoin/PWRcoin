@@ -975,7 +975,7 @@
         <translation>Gần đúng %1 GB of data sẽ được lưu giữ trong danh mục này.</translation>
     </message>
     <message>
-        <source>%1 will download and store a copy of the Bitcoin block chain.</source>
+        <source>%1 will download and store a copy of the PWRcoin block chain.</source>
         <translation>%1 sẽ download và lưu trữ một bản copy của Bitcoin block chain.</translation>
     </message>
     <message>
@@ -1010,11 +1010,11 @@
         <translation>Form</translation>
     </message>
     <message>
-        <source>Recent transactions may not yet be visible, and therefore your wallet's balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the bitcoin network, as detailed below.</source>
+        <source>Recent transactions may not yet be visible, and therefore your wallet's balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the PWRcoin network, as detailed below.</source>
         <translation>Giao dịch gần đây có thể chưa được hiển thị, và vì vậy số dư wallet của bạn có thể không dúng. Thông tin này sẽ được làm đúng khi wallet hoàn thành đồng bộ với bitcoin network, như chi tiết bên dưới.</translation>
     </message>
     <message>
-        <source>Attempting to spend bitcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
+        <source>Attempting to spend pwrcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
         <translation>Cố gắng spend các bitcoins bị ảnh hưởng bởi các giao dịch chưa được hiển thị sẽ không được chấp nhận bởi mạng.</translation>
     </message>
     <message>
@@ -3308,10 +3308,6 @@ Lưu ý: Vì phí được tính trên cơ sở mỗi byte, nên phí "100 satos
     <message>
         <source>Please check that your computer's date and time are correct! If your clock is wrong, %s will not work properly.</source>
         <translation>Please check that your computer's date and time are correct! If your clock is wrong, %s will not work properly.</translation>
-    </message>
-    <message>
-        <source>Please contribute if you find %s useful. Visit %s for further information about the software.</source>
-        <translation>Please contribute if you find %s useful. Visit %s for further information about the software.</translation>
     </message>
     <message>
         <source>The block database contains a block which appears to be from the future. This may be due to your computer's date and time being set incorrectly. Only rebuild the block database if you are sure that your computer's date and time are correct</source>

@@ -23,7 +23,7 @@ WORKINGDIR = "/tmp/bitcoin_verify_binaries"
 HASHFILE = "hashes.tmp"
 HOST1 = "https://bitcoincore.org"
 HOST2 = "https://bitcoin.org"
-VERSIONPREFIX = "bitcoin-core-"
+VERSIONPREFIX = "PWRcoin-core-"
 SIGNATUREFILENAME = "SHA256SUMS.asc"
 
 
@@ -112,7 +112,7 @@ def main(args):
     sigfile2 = SIGNATUREFILENAME + ".2"
     success, output = download_with_wget(HOST2 + remote_sigfile, sigfile2)
     if not success:
-        print("bitcoin.org failed to provide signature file, "
+        print("PWRcoin.org failed to provide signature file, "
               "but bitcoincore.org did?")
         print("wget output:")
         print(indent(output, '\t'))
@@ -121,7 +121,7 @@ def main(args):
 
     # ensure that both signature files are equal
     if not files_are_equal(sigfile1, sigfile2):
-        print("bitcoin.org and bitcoincore.org signature files were not equal?")
+        print("PWRcoin.org and bitcoincore.org signature files were not equal?")
         print(f"See files {WORKINGDIR}/{sigfile1} and {WORKINGDIR}/{sigfile2}")
         return 6
 

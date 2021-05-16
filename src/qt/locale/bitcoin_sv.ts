@@ -980,7 +980,7 @@ Försök igen.</translation>
         <translation>Ungefär %1 GB data kommer att lagras i den här katalogen.</translation>
     </message>
     <message>
-        <source>%1 will download and store a copy of the Bitcoin block chain.</source>
+        <source>%1 will download and store a copy of the PWRcoin block chain.</source>
         <translation>%1 kommer att ladda ner och lagra en kopia av Bitcoins blockkedja.</translation>
     </message>
     <message>
@@ -1015,11 +1015,11 @@ Försök igen.</translation>
         <translation>Formulär</translation>
     </message>
     <message>
-        <source>Recent transactions may not yet be visible, and therefore your wallet's balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the bitcoin network, as detailed below.</source>
+        <source>Recent transactions may not yet be visible, and therefore your wallet's balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the PWRcoin network, as detailed below.</source>
         <translation>Nyligen gjorda transaktioner visas inte korrekt och därför kan din plånboks saldo visas felaktigt. Denna information kommer att visas korrekt så snart din plånbok har synkroniserats med Bitcoin-nätverket enligt informationen nedan.</translation>
     </message>
     <message>
-        <source>Attempting to spend bitcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
+        <source>Attempting to spend pwrcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
         <translation>Att försöka spendera bitcoin som påverkas av transaktioner som ännu inte visas kommer inte accepteras av nätverket.</translation>
     </message>
     <message>
@@ -3285,10 +3285,6 @@ Notera: Då avgiften beräknas per byte kommer en avgift på 50 satoshi tas ut f
     <message>
         <source>Please check that your computer's date and time are correct! If your clock is wrong, %s will not work properly.</source>
         <translation>Kontrollera att din dators datum och tid är korrekt! Om klockan går fel kommer %s inte att fungera korrekt.</translation>
-    </message>
-    <message>
-        <source>Please contribute if you find %s useful. Visit %s for further information about the software.</source>
-        <translation>Var snäll och bidra om du finner %s användbar. Besök %s för mer information om mjukvaran.</translation>
     </message>
     <message>
         <source>The block database contains a block which appears to be from the future. This may be due to your computer's date and time being set incorrectly. Only rebuild the block database if you are sure that your computer's date and time are correct</source>

@@ -1033,8 +1033,8 @@ Signing is only possible with addresses of the type 'legacy'.</translation>
         <translation>Approximately %1 GB of data will be stored in this directory.</translation>
     </message>
     <message>
-        <source>%1 will download and store a copy of the Bitcoin block chain.</source>
-        <translation>%1 will download and store a copy of the Bitcoin block chain.</translation>
+        <source>%1 will download and store a copy of the PWRcoin block chain.</source>
+        <translation>%1 will download and store a copy of the PWRcoin block chain.</translation>
     </message>
     <message>
         <source>The wallet will also be stored in this directory.</source>
@@ -1068,12 +1068,12 @@ Signing is only possible with addresses of the type 'legacy'.</translation>
         <translation>Form</translation>
     </message>
     <message>
-        <source>Recent transactions may not yet be visible, and therefore your wallet's balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the bitcoin network, as detailed below.</source>
-        <translation>Recent transactions may not yet be visible, and therefore your wallet's balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the bitcoin network, as detailed below.</translation>
+        <source>Recent transactions may not yet be visible, and therefore your wallet's balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the PWRcoin network, as detailed below.</source>
+        <translation>Recent transactions may not yet be visible, and therefore your wallet's balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the PWRcoin network, as detailed below.</translation>
     </message>
     <message>
-        <source>Attempting to spend bitcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
-        <translation>Attempting to spend bitcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</translation>
+        <source>Attempting to spend pwrcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
+        <translation>Attempting to spend pwrcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</translation>
     </message>
     <message>
         <source>Number of blocks left</source>
@@ -3574,10 +3574,6 @@ Go to File &gt; Open Wallet to load a wallet.
     <message>
         <source>Please check that your computer's date and time are correct! If your clock is wrong, %s will not work properly.</source>
         <translation>Please check that your computer's date and time are correct! If your clock is wrong, %s will not work properly.</translation>
-    </message>
-    <message>
-        <source>Please contribute if you find %s useful. Visit %s for further information about the software.</source>
-        <translation>Please contribute if you find %s useful. Visit %s for further information about the software.</translation>
     </message>
     <message>
         <source>The block database contains a block which appears to be from the future. This may be due to your computer's date and time being set incorrectly. Only rebuild the block database if you are sure that your computer's date and time are correct</source>

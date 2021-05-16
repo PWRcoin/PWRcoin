@@ -1003,7 +1003,7 @@
         <translation>Aproximadamente %1 GB de dados irão ser guardados nesta pasta.</translation>
     </message>
     <message>
-        <source>%1 will download and store a copy of the Bitcoin block chain.</source>
+        <source>%1 will download and store a copy of the PWRcoin block chain.</source>
         <translation>%1 irá descarregar e armazenar uma cópia da cadeia de blocos da Bitcoin.</translation>
     </message>
     <message>
@@ -1038,11 +1038,11 @@
         <translation>Formulário</translation>
     </message>
     <message>
-        <source>Recent transactions may not yet be visible, and therefore your wallet's balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the bitcoin network, as detailed below.</source>
+        <source>Recent transactions may not yet be visible, and therefore your wallet's balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the PWRcoin network, as detailed below.</source>
         <translation>Transações recentes podem não ser visíveis por agora, portanto o saldo da sua carteira pode estar incorreto. Esta informação será corrigida quando a sua carteira acabar de sincronizar com a rede, como está explicado em baixo.</translation>
     </message>
     <message>
-        <source>Attempting to spend bitcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
+        <source>Attempting to spend pwrcoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
         <translation>Tentar enviar bitcoins que estão afetadas por transações ainda não exibidas não será aceite pela rede.</translation>
     </message>
     <message>
@@ -3530,10 +3530,6 @@ Ir para o arquivo &gt; Abrir carteira para carregar a carteira
     <message>
         <source>Please check that your computer's date and time are correct! If your clock is wrong, %s will not work properly.</source>
         <translation>Por favor verifique que a data e hora do seu computador estão certos! Se o relógio não estiver certo, o %s não funcionará corretamente.</translation>
-    </message>
-    <message>
-        <source>Please contribute if you find %s useful. Visit %s for further information about the software.</source>
-        <translation>Por favor, contribua se achar que %s é útil. Visite %s para mais informação sobre o software.</translation>
     </message>
     <message>
         <source>The block database contains a block which appears to be from the future. This may be due to your computer's date and time being set incorrectly. Only rebuild the block database if you are sure that your computer's date and time are correct</source>

@@ -42,7 +42,6 @@
 #include <QGuiApplication>
 #include <QJsonObject>
 #include <QKeyEvent>
-#include <QLatin1String>
 #include <QLineEdit>
 #include <QList>
 #include <QLocale>
@@ -55,7 +54,6 @@
 #include <QShortcut>
 #include <QSize>
 #include <QString>
-#include <QStringBuilder>
 #include <QTextDocument> // for Qt::mightBeRichText
 #include <QThread>
 #include <QUrlQuery>
@@ -124,7 +122,7 @@ void setupAddressWidget(QValidatedLineEdit *widget, QWidget *parent)
 bool parseBitcoinURI(const QUrl &uri, SendCoinsRecipient *out)
 {
     // return if URI is not valid or is no bitcoin: URI
-    if(!uri.isValid() || uri.scheme() != QString("bitcoin"))
+    if(!uri.isValid() || uri.scheme() != QString("PWRcoin"))
         return false;
 
     SendCoinsRecipient rv;
@@ -188,7 +186,7 @@ QString formatBitcoinURI(const SendCoinsRecipient &info)
 {
     bool bech_32 = info.address.startsWith(QString::fromStdString(Params().Bech32HRP() + "1"));
 
-    QString ret = QString("bitcoin:%1").arg(bech_32 ? info.address.toUpper() : info.address);
+    QString ret = QString("PWRcoin:%1").arg(bech_32 ? info.address.toUpper() : info.address);
     int paramCount = 0;
 
     if (info.amount)
@@ -418,7 +416,7 @@ bool openBitcoinConf()
 
     configFile.close();
 
-    /* Open bitcoin.conf with the associated application */
+    /* Open pwrcoin.conf with the associated application */
     bool res = QDesktopServices::openUrl(QUrl::fromLocalFile(boostPathToQString(pathConfig)));
 #ifdef Q_OS_MAC
     // Workaround for macOS-specific behavior; see #15409.
@@ -482,10 +480,10 @@ fs::path static StartupShortcutPath()
 {
     std::string chain = gArgs.GetChainName();
     if (chain == CBaseChainParams::MAIN)
-        return GetSpecialFolderPath(CSIDL_STARTUP) / "Bitcoin.lnk";
+        return GetSpecialFolderPath(CSIDL_STARTUP) / "PWRcoin.lnk";
     if (chain == CBaseChainParams::TESTNET) // Remove this special case when CBaseChainParams::TESTNET = "testnet4"
-        return GetSpecialFolderPath(CSIDL_STARTUP) / "Bitcoin (testnet).lnk";
-    return GetSpecialFolderPath(CSIDL_STARTUP) / strprintf("Bitcoin (%s).lnk", chain);
+        return GetSpecialFolderPath(CSIDL_STARTUP) / "PWRcoin (testnet).lnk";
+    return GetSpecialFolderPath(CSIDL_STARTUP) / strprintf("PWRcoin (%s).lnk", chain);
 }
 
 bool GetStartOnSystemStartup()
@@ -565,8 +563,8 @@ fs::path static GetAutostartFilePath()
 {
     std::string chain = gArgs.GetChainName();
     if (chain == CBaseChainParams::MAIN)
-        return GetAutostartDir() / "bitcoin.desktop";
-    return GetAutostartDir() / strprintf("bitcoin-%s.desktop", chain);
+        return GetAutostartDir() / "PWRcoin.desktop";
+    return GetAutostartDir() / strprintf("PWRcoin-%s.desktop", chain);
 }
 
 bool GetStartOnSystemStartup()
@@ -630,11 +628,8 @@ bool SetStartOnSystemStartup(bool fAutoStart) { return false; }
 
 void setClipboard(const QString& str)
 {
-    QClipboard* clipboard = QApplication::clipboard();
-    clipboard->setText(str, QClipboard::Clipboard);
-    if (clipboard->supportsSelection()) {
-        clipboard->setText(str, QClipboard::Selection);
-    }
+    QApplication::clipboard()->setText(str, QClipboard::Clipboard);
+    QApplication::clipboard()->setText(str, QClipboard::Selection);
 }
 
 fs::path qstringToBoostPath(const QString &path)
@@ -896,24 +891,6 @@ QImage GetImage(const QLabel* label)
 #else
     return label->pixmap()->toImage();
 #endif
-}
-
-QString MakeHtmlLink(const QString& source, const QString& link)
-{
-    return QString(source).replace(
-        link,
-        QLatin1String("<a href=\"") % link % QLatin1String("\">") % link % QLatin1String("</a>"));
-}
-
-void PrintSlotException(
-    const std::exception* exception,
-    const QObject* sender,
-    const QObject* receiver)
-{
-    std::string description = sender->metaObject()->className();
-    description += "->";
-    description += receiver->metaObject()->className();
-    PrintExceptionContinue(exception, description.c_str());
 }
 
 } // namespace GUIUtil

@@ -7,46 +7,45 @@
 #include <psbt.h>
 #include <util/strencodings.h>
 #include <util/system.h>
-#include <external_signer.h>
+#include <wallet/external_signer.h>
 
-#include <stdexcept>
-#include <string>
-#include <vector>
-
-#ifdef ENABLE_EXTERNAL_SIGNER
-
-ExternalSigner::ExternalSigner(const std::string& command, const std::string& fingerprint, const std::string chain, const std::string name): m_command(command), m_fingerprint(fingerprint), m_chain(chain), m_name(name) {}
+ExternalSigner::ExternalSigner(const std::string& command, const std::string& fingerprint, std::string chain, std::string name): m_command(command), m_fingerprint(fingerprint), m_chain(chain), m_name(name) {}
 
 const std::string ExternalSigner::NetworkArg() const
 {
     return " --chain " + m_chain;
 }
 
-bool ExternalSigner::Enumerate(const std::string& command, std::vector<ExternalSigner>& signers, const std::string chain)
+#ifdef ENABLE_EXTERNAL_SIGNER
+
+bool ExternalSigner::Enumerate(const std::string& command, std::vector<ExternalSigner>& signers, std::string chain, bool ignore_errors)
 {
     // Call <command> enumerate
     const UniValue result = RunCommandParseJSON(command + " enumerate");
     if (!result.isArray()) {
-        throw std::runtime_error(strprintf("'%s' received invalid response, expected array of signers", command));
+        if (ignore_errors) return false;
+        throw ExternalSignerException(strprintf("'%s' received invalid response, expected array of signers", command));
     }
     for (UniValue signer : result.getValues()) {
         // Check for error
         const UniValue& error = find_value(signer, "error");
         if (!error.isNull()) {
+            if (ignore_errors) return false;
             if (!error.isStr()) {
-                throw std::runtime_error(strprintf("'%s' error", command));
+                throw ExternalSignerException(strprintf("'%s' error", command));
             }
-            throw std::runtime_error(strprintf("'%s' error: %s", command, error.getValStr()));
+            throw ExternalSignerException(strprintf("'%s' error: %s", command, error.getValStr()));
         }
         // Check if fingerprint is present
         const UniValue& fingerprint = find_value(signer, "fingerprint");
         if (fingerprint.isNull()) {
-            throw std::runtime_error(strprintf("'%s' received invalid response, missing signer fingerprint", command));
+            if (ignore_errors) return false;
+            throw ExternalSignerException(strprintf("'%s' received invalid response, missing signer fingerprint", command));
         }
-        const std::string fingerprintStr = fingerprint.get_str();
+        std::string fingerprintStr = fingerprint.get_str();
         // Skip duplicate signer
         bool duplicate = false;
-        for (const ExternalSigner& signer : signers) {
+        for (ExternalSigner signer : signers) {
             if (signer.m_fingerprint.compare(fingerprintStr) == 0) duplicate = true;
         }
         if (duplicate) break;
@@ -65,7 +64,7 @@ UniValue ExternalSigner::DisplayAddress(const std::string& descriptor) const
     return RunCommandParseJSON(m_command + " --fingerprint \"" + m_fingerprint + "\"" + NetworkArg() + " displayaddress --desc \"" + descriptor + "\"");
 }
 
-UniValue ExternalSigner::GetDescriptors(const int account)
+UniValue ExternalSigner::GetDescriptors(int account)
 {
     return RunCommandParseJSON(m_command + " --fingerprint \"" + m_fingerprint + "\"" + NetworkArg() + " getdescriptors --account " + strprintf("%d", account));
 }
@@ -80,7 +79,7 @@ bool ExternalSigner::SignTransaction(PartiallySignedTransaction& psbtx, std::str
     bool match = false;
     for (unsigned int i = 0; i < psbtx.inputs.size(); ++i) {
         const PSBTInput& input = psbtx.inputs[i];
-        for (const auto& entry : input.hd_keypaths) {
+        for (auto entry : input.hd_keypaths) {
             if (m_fingerprint == strprintf("%08x", ReadBE32(entry.second.fingerprint))) match = true;
         }
     }
@@ -90,8 +89,8 @@ bool ExternalSigner::SignTransaction(PartiallySignedTransaction& psbtx, std::str
         return false;
     }
 
-    const std::string command = m_command + " --stdin --fingerprint \"" + m_fingerprint + "\"" + NetworkArg();
-    const std::string stdinStr = "signtx \"" + EncodeBase64(ssTx.str()) + "\"";
+    std::string command = m_command + " --stdin --fingerprint \"" + m_fingerprint + "\"" + NetworkArg();
+    std::string stdinStr = "signtx \"" + EncodeBase64(ssTx.str()) + "\"";
 
     const UniValue signer_result = RunCommandParseJSON(command, stdinStr);
 
@@ -117,4 +116,4 @@ bool ExternalSigner::SignTransaction(PartiallySignedTransaction& psbtx, std::str
     return true;
 }
 
-#endif // ENABLE_EXTERNAL_SIGNER
+#endif

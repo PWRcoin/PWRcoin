@@ -80,5 +80,6 @@ FUZZ_TARGET_INIT(process_messages, initialize_process_messages)
         }
     }
     SyncWithValidationInterfaceQueue();
+    LOCK2(::cs_main, g_cs_orphans); // See init.cpp for rationale for implicit locking order requirement
     g_setup->m_node.connman->StopNodes();
 }

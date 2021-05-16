@@ -338,7 +338,7 @@ bitcoin.org (see below for bitcoin.org update instructions).
 
   - Update packaging repo
 
-      - Push the flatpak to flathub, e.g. https://github.com/flathub/org.bitcoincore.bitcoin-qt/pull/2
+      - Push the flatpak to flathub, e.g. https://github.com/flathub/org.bitcoincore.pwrcoin-qt/pull/2
 
       - Push the latest version to master (if applicable), e.g. https://github.com/bitcoin-core/packaging/pull/32
 
@@ -349,12 +349,12 @@ bitcoin.org (see below for bitcoin.org update instructions).
 
         - https://code.launchpad.net/~bitcoin-core/bitcoin-core-snap/+git/packaging (Click "Import Now" to fetch the branch)
         - https://code.launchpad.net/~bitcoin-core/bitcoin-core-snap/+git/packaging/+ref/0.xx (Click "Create snap package")
-        - Name it "bitcoin-core-snap-0.xx"
+        - Name it "PWRcoin-core-snap-0.xx"
         - Leave owner and series as-is
         - Select architectures that are compiled via gitian
         - Leave "automatically build when branch changes" unticked
         - Tick "automatically upload to store"
-        - Put "bitcoin-core" in the registered store package name field
+        - Put "PWRcoin-core" in the registered store package name field
         - Tick the "edge" box
         - Put "0.xx" in the track field
         - Click "create snap package"

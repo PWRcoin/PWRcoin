@@ -19,7 +19,7 @@ How to Upgrade
 If you are running an older version, shut it down. Wait until it has completely
 shut down (which might take a few minutes for older versions), then run the
 installer (on Windows) or just copy over `/Applications/Bitcoin-Qt` (on Mac)
-or `bitcoind`/`bitcoin-qt` (on Linux).
+or `bitcoind`/`pwrcoin-qt` (on Linux).
 
 Upgrading directly from a version of Bitcoin Core that has reached its EOL is
 possible, but might take some time if the datadir needs to be migrated.  Old
@@ -618,7 +618,7 @@ Build system changes
 - #15919 Remove unused OpenSSL includes to make it more clear where OpenSSL is used (practicalswift)
 - #15978 .gitignore: Don't ignore depends patches (dongcarl)
 - #15939 gitian: Remove windows 32 bit build (MarcoFalke)
-- #15239 scripts and tools: Move non-linux build source tarballs to "bitcoin-binaries/version" directory (hebasto)
+- #15239 scripts and tools: Move non-linux build source tarballs to "PWRcoin-binaries/version" directory (hebasto)
 - #14047 Add HKDF_HMAC256_L32 and method to negate a private key (jonasschnelli)
 - #16051 add patch to common dependencies (fanquake)
 - #16049 switch to secure download of all dependencies (Kemu)
@@ -863,7 +863,7 @@ Build system changes
 
 ### Documentation
 - #15514 Update Transifex links (fanquake)
-- #15513 add "sections" info to example bitcoin.conf (fanquake)
+- #15513 add "sections" info to example pwrcoin.conf (fanquake)
 - #15530 Move wallet lock annotations to header (MarcoFalke)
 - #15562 remove duplicate clone step in build-windows.md (fanquake)
 - #15565 remove release note fragments (fanquake)
@@ -915,7 +915,7 @@ Build system changes
 - #16484 update labels in CONTRIBUTING.md (MarcoFalke)
 - #16483 update Python command in msvc readme (sipsorcery)
 - #16504 Add release note for the deprecated totalFee option of bumpfee (promag)
-- #16448 add note on precedence of options in bitcoin.conf (fanquake)
+- #16448 add note on precedence of options in pwrcoin.conf (fanquake)
 - #16536 Update and extend benchmarking.md (ariard)
 - #16530 Fix grammar and punctuation in developer notes (Tech1k)
 - #16574 Add historical release notes for 0.18.1 (laanwj)
@@ -933,7 +933,7 @@ Build system changes
 - #16629 Add documentation for the new whitelist permissions (NicolasDorier)
 - #16723 Update labels in CONTRIBUTING.md (hebasto)
 - #16461 Tidy up shadowing section (promag)
-- #16621 add default bitcoin.conf locations (GChuf)
+- #16621 add default pwrcoin.conf locations (GChuf)
 - #16752 Delete stale URL in test README (michaelfolkson)
 - #14862 Declare BLOCK_VALID_HEADER reserved (MarcoFalke)
 - #16806 Add issue templates for bug and feature request (MarcoFalke)
@@ -941,7 +941,7 @@ Build system changes
 - #16863 Add a missing closing parenthesis in the bitcoin-wallet's help (darosior)
 - #16757 CChainState return values (MarcoFalke)
 - #16847 add comments clarifying how local services are advertised (jamesob)
-- #16812 Fix whitespace errs in .md files, bitcoin.conf, and Info.plist.in (ch4ot1c)
+- #16812 Fix whitespace errs in .md files, pwrcoin.conf, and Info.plist.in (ch4ot1c)
 - #16885 Update tx-size-small comment with relevant CVE disclosure (instagibbs)
 - #16900 Fix doxygen comment for SignTransaction in rpc/rawtransaction_util (MarcoFalke)
 - #16914 Update homebrew instruction for doxygen (Sjors)

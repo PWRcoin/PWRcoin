@@ -7,11 +7,12 @@
 export LC_ALL=C.UTF-8
 
 export HOST=x86_64-apple-darwin18
-export PIP_PACKAGES="zmq lief"
+export PIP_PACKAGES="zmq"
 export GOAL="install"
-export BITCOIN_CONFIG="--with-gui --enable-reduce-exports --enable-external-signer"
+export BITCOIN_CONFIG="--with-gui --enable-reduce-exports --with-boost-process"
 export CI_OS_NAME="macos"
 export NO_DEPENDS=1
 export OSX_SDK=""
 export CCACHE_SIZE=300M
+
 export RUN_SECURITY_TESTS="true"

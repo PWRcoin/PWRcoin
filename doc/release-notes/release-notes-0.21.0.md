@@ -22,7 +22,7 @@ How to Upgrade
 If you are running an older version, shut it down. Wait until it has completely
 shut down (which might take a few minutes in some cases), then run the
 installer (on Windows) or just copy over `/Applications/Bitcoin-Qt` (on Mac)
-or `bitcoind`/`bitcoin-qt` (on Linux).
+or `bitcoind`/`pwrcoin-qt` (on Linux).
 
 Upgrading directly from a version of Bitcoin Core that has reached its EOL is
 possible, but it might take some time if the data directory needs to be migrated. Old
@@ -327,7 +327,7 @@ Wallet
 
 Bitcoin Core will no longer automatically create new wallets on startup. It will
 load existing wallets specified by `-wallet` options on the command line or in
-`bitcoin.conf` or `settings.json` files. And by default it will also load a
+`pwrcoin.conf` or `settings.json` files. And by default it will also load a
 top-level unnamed ("") wallet. However, if specified wallets don't exist,
 Bitcoin Core will now just log warnings instead of creating new wallets with
 new keys and addresses like previous releases did.
@@ -494,7 +494,7 @@ GUI changes
 - Wallets created or loaded in the GUI will now be automatically loaded on
   startup, so they don't need to be manually reloaded next time Bitcoin Core is
   started. The list of wallets to load on startup is stored in
-  `\<datadir\>/settings.json` and augments any command line or `bitcoin.conf`
+  `\<datadir\>/settings.json` and augments any command line or `pwrcoin.conf`
   `-wallet=` settings that specify more wallets to load. Wallets that are
   unloaded in the GUI get removed from the settings list so they won't load
   again automatically next startup. (#19754)
@@ -1161,7 +1161,7 @@ Tests
 - #19765 Fix getmempoolancestors RPC result doc (MarcoFalke)
 - #19786 Remove label from good first issue template (MarcoFalke)
 - #19646 Updated outdated help command for getblocktemplate (jakeleventhal)
-- #18817 Document differences in bitcoind and bitcoin-qt locale handling (practicalswift)
+- #18817 Document differences in bitcoind and pwrcoin-qt locale handling (practicalswift)
 - #19870 update PyZMQ install instructions, fix `zmq_sub.py` file permissions (jonatack)
 - #19903 Update build-openbsd.md with GUI support (grubles)
 - #19241 help: Generate checkpoint height from chainparams (luke-jr)

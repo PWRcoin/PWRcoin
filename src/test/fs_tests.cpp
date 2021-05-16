@@ -13,19 +13,19 @@ BOOST_FIXTURE_TEST_SUITE(fs_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(fsbridge_fstream)
 {
-    fs::path tmpfolder = m_args.GetDataDirPath();
+    fs::path tmpfolder = GetDataDir();
     // tmpfile1 should be the same as tmpfile2
     fs::path tmpfile1 = tmpfolder / "fs_tests_₿_🏃";
     fs::path tmpfile2 = tmpfolder / "fs_tests_₿_🏃";
     {
         fsbridge::ofstream file(tmpfile1);
-        file << "bitcoin";
+        file << "PWRcoin";
     }
     {
         fsbridge::ifstream file(tmpfile2);
         std::string input_buffer;
         file >> input_buffer;
-        BOOST_CHECK_EQUAL(input_buffer, "bitcoin");
+        BOOST_CHECK_EQUAL(input_buffer, "PWRcoin");
     }
     {
         fsbridge::ifstream file(tmpfile1, std::ios_base::in | std::ios_base::ate);
@@ -41,17 +41,17 @@ BOOST_AUTO_TEST_CASE(fsbridge_fstream)
         fsbridge::ifstream file(tmpfile1);
         std::string input_buffer;
         file >> input_buffer;
-        BOOST_CHECK_EQUAL(input_buffer, "bitcointests");
+        BOOST_CHECK_EQUAL(input_buffer, "PWRcointests");
     }
     {
         fsbridge::ofstream file(tmpfile2, std::ios_base::out | std::ios_base::trunc);
-        file << "bitcoin";
+        file << "PWRcoin";
     }
     {
         fsbridge::ifstream file(tmpfile1);
         std::string input_buffer;
         file >> input_buffer;
-        BOOST_CHECK_EQUAL(input_buffer, "bitcoin");
+        BOOST_CHECK_EQUAL(input_buffer, "PWRcoin");
     }
     {
         // Join an absolute path and a relative path.
